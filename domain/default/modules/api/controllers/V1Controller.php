@@ -20,4 +20,13 @@ class V1Controller extends \wco\kernel\Controller{
         
         return true;
     }
+    
+    public function actionAuthorization() {
+        $mUser = new Users();
+        
+        header('Content-Type: application/json');
+        echo $mUser->authorization();
+        
+        return true;
+    }
 }

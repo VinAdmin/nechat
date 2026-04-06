@@ -4,6 +4,7 @@ namespace app\models;
 
 use wco\db\DB;
 use wco\kernel\WCO;
+use app\models\AccessToken;
 
 /**
  * Описание класса: Работа c пользователем.
@@ -49,5 +50,35 @@ class Users extends DB{
         }
         
         return json_encode(["error" => "A user with this name already exists."]);
+    }
+    
+    public function authorization() {
+        $data = json_decode(file_get_contents("php://input"), true);
+        
+        if(!isset($data['login'])){
+            http_response_code(401);
+            return json_encode(["error" => "Invalid data"]);
+        }
+        
+        $user_id = "@" . strip_tags($data['login']). ":" . WCO::$domain;
+        $password = strip_tags($data['password']);
+        
+        $this->select()->form()->where("user_id = :user_id");
+        $result = $this->fetch(['user_id' => $user_id]);
+        
+        if ($result) {
+            if (!password_verify($password, $result['password'])) {
+                return json_encode(["error" => "Incorrect login or password"]);
+            }
+        }
+        
+        $mAccessToken = new AccessToken();
+        $token = $mAccessToken->createToken($result['id']);
+        
+        return json_encode([
+            "status"  => "ok",
+            'user_id' => $result['user_id'],
+            'token'   => $token
+        ]);
     }
 }
