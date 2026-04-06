@@ -22,27 +22,6 @@ use wco\kernel\WCO;
         
         <div class="container-fluid">
             <div class="row">
-                <div class="col-xl-3 left_block">
-                    <div class="card">
-                        <div class="card-body">
-                            <ul class="nav flex-column">
-                                <li class="nav-item">
-                                    <a class="nav-link active" href="<?=WCO::Url('/')?>">Главная</a>
-                                </li>
-                                <li class="nav-item">
-                                    <a class="nav-link active" href="<?=WCO::Url('/reg')?>">Регистрация</a>
-                                </li>
-                                <li class="nav-item">
-                                  <a class="nav-link" href="#">Ссылка</a>
-                                </li>
-                                <li class="nav-item">
-                                  <a class="nav-link disabled" href="#" tabindex="-1" aria-disabled="true">Отключенная</a>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-                
                 <div class="col-xl-9 content">
                     <?=$this->views?>
                 </div>

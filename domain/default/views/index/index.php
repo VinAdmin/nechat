@@ -1,5 +1,6 @@
 <?php
 use wco\forms\Form;
+use wco\kernel\WCO;
 
 $this->title = 'Страницы Index';
 $aut = new Form();
@@ -14,6 +15,12 @@ $aut = new Form();
     <div><?=$aut->Input('text', 'login')->Field()?></div>
     <div><?=$aut->Input('text', 'password')->Field()?></div>
     <div><?=$aut->Input(Form::INPUT_SUBMIT, 'aut', 'Авторизация')->Field()?></div>
+</div>
+
+<div>
+    <ul>
+        <li><a class="nav-link active" href="<?=WCO::Url('/reg')?>">Регистрация</a></li>
+    </ul>
 </div>
 
 <script>

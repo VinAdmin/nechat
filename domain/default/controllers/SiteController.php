@@ -11,4 +11,9 @@ class SiteController extends \wco\kernel\Controller{
         $this->generate('/index/reg.php');
         return true;
     }
+    
+    public function actionChat() {
+        $this->generate('/index/chat.php');
+        return true;
+    }
 }
