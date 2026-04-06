@@ -1,0 +1,25 @@
+{
+    "name": "vinadmin/chat",
+    "description": "Web optimization coding framework",
+    "type": "project",
+    "authors": [
+        {
+            "name": "Vitaliy Olkhin",
+            "email": "ovvitalik@gmail.com"
+        }
+    ],
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-4": {
+            "app\\": ""
+        }
+    },
+    "require": {
+        "vinadmin/wco": "@dev",
+        "tracy/tracy": "v2.11.3",
+        "robmorgan/phinx": "0.12.11",
+        "firebase/php-jwt": "v7.0.5"
+    },
+    "repositories": [
+    ]
+}
