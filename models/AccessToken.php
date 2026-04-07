@@ -36,4 +36,24 @@ class AccessToken extends DB{
         
         return $jwt;
     }
+    
+    public function getToken() {
+        $headers = getallheaders();
+        
+        if (!isset($headers['Authorization'])) {
+            return false;
+        }
+        
+        $token = str_replace("Bearer ", "", $headers['Authorization']);
+        $token = trim(strip_tags($token));
+        
+        $this->select()->form()->where('token = :token');
+        $result = $this->fetch(['token' => $token]);
+        
+        if(isset($result['token'])){
+            return true;
+        }
+        
+        return false;
+    }
 }

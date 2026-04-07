@@ -18,7 +18,8 @@
         "vinadmin/wco": "@dev",
         "tracy/tracy": "v2.11.3",
         "robmorgan/phinx": "0.12.11",
-        "firebase/php-jwt": "v7.0.5"
+        "firebase/php-jwt": "v7.0.5",
+        "ramsey/uuid": "5.x-dev"
     },
     "repositories": [
     ]

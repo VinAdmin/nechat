@@ -1,6 +1,7 @@
 <?php
 use wco\kernel\WCO;
 use app\models\Users;
+use app\models\Rooms;
 
 /**
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
@@ -26,6 +27,24 @@ class V1Controller extends \wco\kernel\Controller{
         
         header('Content-Type: application/json');
         echo $mUser->authorization();
+        
+        return true;
+    }
+    
+    public function actionCreateRoom() {
+        $mRooms = new Rooms();
+        
+        header('Content-Type: application/json');
+        echo $mRooms->createRoom();
+        
+        return true;
+    }
+    
+    public function actionJoined_rooms() {
+        $mRooms = new Rooms();
+        
+        header('Content-Type: application/json');
+        echo $mRooms->joinedRooms();
         
         return true;
     }
