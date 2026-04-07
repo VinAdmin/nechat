@@ -3,11 +3,12 @@ use wco\forms\Form;
 
 $this->title = 'Чат';
 $fCreateRoom = new Form();
+$fMessages = new Form();
 ?>
 <div id="notify"></div>
 
-<div>
-    <div>
+<div class="prog_chat">
+    <div class="rooms_board">
         <div>
             <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createRoom">
                 Добавить
@@ -20,6 +21,17 @@ $fCreateRoom = new Form();
     </div>
     
     <div class="chat">
+        <div id="messages" class="messages">
+            
+        </div>
+        <?=$fMessages->FormStart('sendMessage')?>
+        <div class="messageComposer">
+            <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput'])->Field()?>
+            <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', 'Отправить', [
+                    'class' => 'btn btn-primary'
+                ])->Field()?>
+        </div>
+        <?=$fMessages->FormEnd();?>
     </div>
 </div>
 
@@ -50,12 +62,6 @@ $fCreateRoom = new Form();
 </div>
 
 <script>
-    
-    const hash = window.location.hash.substring(1);
-
-    const roomId = hash.replace('room_', '');
-    console.log(roomId);
-    
     async function joinedRooms(token) {
         const res = await fetch('/api/v1/joined_rooms/', {
             headers: {
@@ -67,11 +73,9 @@ $fCreateRoom = new Form();
         const data = await res.json();
         
         if(data.error){
-            notify(data.error, 'warning', 3000 * 5);
+            notify(data.error, 'warning', 1000 * 5);
             return;
         }
-        
-        console.log(data);
         
         const container = document.getElementById('rooms');
         container.innerHTML = '';
@@ -81,7 +85,7 @@ $fCreateRoom = new Form();
             div.className = 'room';
 
             div.innerHTML = `
-                <a href="#room_${room.room_id}" onclick>${room.name}</a>
+                <a href="#room_${room.room_id}" class="room-link">${room.name}</a>
             `;
                     
             container.appendChild(div);
@@ -94,8 +98,12 @@ $fCreateRoom = new Form();
         if (link) {
             e.preventDefault();
 
-            const roomId = link.getAttribute('href').substring(1);
-            console.log(roomId);
+            const hash = link.getAttribute('href').substring(1);
+            const roomId = hash.replace('room_', '');
+
+            // если хочешь — обновить URL
+            window.location.hash = link.getAttribute('href');
+            localStorage.setItem('room_id', roomId);
         }
     });
     

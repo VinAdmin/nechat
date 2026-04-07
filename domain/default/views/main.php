@@ -14,19 +14,7 @@ use wco\kernel\WCO;
     </head>
     
     <body>
-        <div class="container">
-            <a href="<?=WCO::Url('/')?>">
-                <img src="/default/images/logotip.png" alt="alt" class="img-fluid"/>
-            </a>
-        </div>
-        
-        <div class="container-fluid">
-            <div class="row">
-                <div class="col-xl-9 content">
-                    <?=$this->views?>
-                </div>
-            </div>
-        </div>
+        <?=$this->views?>
         <?=WCO::getBodyEnd()?>
     </body>
 </html>
