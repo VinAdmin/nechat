@@ -24,6 +24,12 @@ class Rooms extends DB{
     public function createRoom(): string {
         $data = json_decode(file_get_contents("php://input"), true);
         
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            return json_encode(["error" => "\"Invalid token\" error"]);
+        }
+        
         if(!isset($data['name'])){
             http_response_code(401);
             return json_encode(["error" => "?"]);
@@ -31,7 +37,6 @@ class Rooms extends DB{
         $name = strip_tags($data['name']);
         
         $uuid = Uuid::uuid4()->toString();
-        //$random = bin2hex(time() . random_bytes(6)); // 12 символов
         $random = $uuid;
         
         if($name){
@@ -44,7 +49,7 @@ class Rooms extends DB{
             return json_encode(["status" => "ok"]);
         }
         
-        //return json_encode(["error" => "A user with this name already exists."]);
+        return json_encode(["error" => "Unknown error"]);
     }
     
     public function joinedRooms() {
@@ -57,5 +62,12 @@ class Rooms extends DB{
         
         $this->select()->form();
         return json_encode($this->fetchAll());
+    }
+    
+    public function getRoomId(string $roomId): array {
+        $this->select()->form()->where("room_id = :room_id");
+        $result = $this->fetch(['room_id' => $roomId]);
+        
+        return $result;
     }
 }

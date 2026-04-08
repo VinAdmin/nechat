@@ -4,6 +4,7 @@ namespace app\models;
 use wco\db\DB;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
+use app\models\Users;
 
 /**
  * Description of AccessTolen
@@ -12,6 +13,8 @@ use Firebase\JWT\Key;
  * @copyright (c) 2026, Olkhin Vitaliy
  */
 class AccessToken extends DB{
+    public $sender = '';
+            
     function __construct() {
         parent::__construct();
     }
@@ -46,11 +49,14 @@ class AccessToken extends DB{
         
         $token = str_replace("Bearer ", "", $headers['Authorization']);
         $token = trim(strip_tags($token));
+        $mUsers = new Users();
         
-        $this->select()->form()->where('token = :token');
+        $this->select()->form()->joinInner(['u' => $mUsers->init()], "u.id = t1.user_id")->where('token = :token');
         $result = $this->fetch(['token' => $token]);
         
         if(isset($result['token'])){
+            $this->sender = $result['user_id'];
+            
             return true;
         }
         

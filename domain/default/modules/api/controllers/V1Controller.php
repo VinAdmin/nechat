@@ -2,6 +2,7 @@
 use wco\kernel\WCO;
 use app\models\Users;
 use app\models\Rooms;
+use app\models\Events;
 
 /**
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
@@ -45,6 +46,13 @@ class V1Controller extends \wco\kernel\Controller{
         
         header('Content-Type: application/json');
         echo $mRooms->joinedRooms();
+        
+        return true;
+    }
+    
+    public function actionRooms() {
+        $mEvents = new Events();
+        echo $mEvents->create();
         
         return true;
     }

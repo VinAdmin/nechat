@@ -92,6 +92,7 @@ $fMessages = new Form();
         });
     }
     
+    <!-- Событие на выбор комнаты -->
     document.addEventListener('click', (e) => {
         const link = e.target.closest('.room-link');
 
@@ -121,35 +122,71 @@ $fMessages = new Form();
         }, 60000);
     });
     
-    const form = document.getElementById('formCreateRoom');
-    
-    form.addEventListener('submit', async (e) => {
+    function formEvent(id, params, onSuccess){
+        const form = document.getElementById(id);
         const token = localStorage.getItem('token');
-        e.preventDefault();
+        var headers = {};
+        
+        if(params.send_token){
+            headers["Authorization"] = "Bearer " + token
+        }
+        headers['Content-Type'] = 'application/json';
+    
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
 
-        const data = Object.fromEntries(new FormData(form).entries());
+            const data = Object.fromEntries(new FormData(form).entries());
+            
+            if(params.type === 'text'){
+                data.msgtype = 'm.text';
+            }
+            
+            if(params.room){
+                const hash = window.location.hash;
+                const roomId = hash.replace('#room_', '');
+                
+                data.room_id = roomId;
+            }
 
-        const res = await fetch('/api/v1/createRoom/', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
+            const res = await fetch(params.url, {
+                method: params.method,
+                headers: headers,
+                body: JSON.stringify(data)
+            });
+
+            const result = await res.json();
+
+            form.reset(); // очистка формы
+            joinedRooms(token);
+            
+            if (onSuccess) {
+                onSuccess(result);
+            }
         });
-
-        const result = await res.json();
-
-        if(result.error){
-            notify(result.error, 'warning', 3000 * 5);
+    }
+    
+    formEvent('formCreateRoom', {
+        url: '/api/v1/createRoom/',
+        method: 'POST',
+        send_token: true
+    },function(e){
+        if(e.error){
+            notify(e.error, 'warning', 3000 * 5);
             return;
         }
         
         const modalEl = document.getElementById('createRoom');
         const modal = bootstrap.Modal.getInstance(modalEl);
         modal.hide();
-        form.reset(); // очистка формы
-        joinedRooms(token);
-
-        return;
+    });
+    
+    formEvent('sendMessage', {
+        url: '/api/v1/rooms/',
+        method: 'POST',
+        send_token: true,
+        room: true,
+        type: 'text',
+    },function(e){
+        console.log(e);
     });
 </script>
