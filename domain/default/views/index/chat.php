@@ -62,6 +62,54 @@ $fMessages = new Form();
 </div>
 
 <script>
+    sessionStorage.setItem("sync", "");
+    
+    window.room = {};
+    
+    async function sync(token) {
+        const res = await fetch('/api/v1/sync/?since=' + sessionStorage.getItem("sync"), {
+            headers: {
+                "Authorization": "Bearer " + token,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if(!res){
+            return ;
+        }
+        const data = await res.json();
+        
+        if(data.error){
+            notify(data.error, 'warning', 1000 * 5);
+            return;
+        }
+        
+        const container = document.getElementById('messages');
+        //container.innerHTML = '';
+        
+        data.forEach(msg => {
+            if(sessionStorage.getItem("sync") === '' || sessionStorage.getItem("sync") < msg.received_ts){
+                const div = document.createElement('div');
+                div.className = 'msg';
+
+                div.innerHTML = `
+                    ${msg.json.content.body}
+                `;
+                
+                container.appendChild(div);
+                
+                console.log(msg.json);
+                if (!window.room[msg.room_id]) {
+                    window.room[msg.room_id] = [];
+                }
+
+                window.room[msg.room_id].push(msg);
+            }
+            
+            sessionStorage.setItem("sync", msg.received_ts);
+        });
+    }
+    
     async function joinedRooms(token) {
         const res = await fetch('/api/v1/joined_rooms/', {
             headers: {
@@ -105,6 +153,28 @@ $fMessages = new Form();
             // если хочешь — обновить URL
             window.location.hash = link.getAttribute('href');
             localStorage.setItem('room_id', roomId);
+            
+            const container = document.getElementById('messages');
+            container.innerHTML = '';
+            
+            if(window.room[roomId]){
+                const data = window.room[roomId];
+                //console.log(data);
+                data.forEach(room => {
+                    if (Object.hasOwn(item.json, 'content')) {
+                        if(Object.hasOwn(item.json.content, 'body')){
+                            const div = document.createElement('div');
+                            div.className = 'msg';
+                            console.log(room.json);
+
+                            div.innerHTML = `
+                                ${item.json.content.body}
+                            `;
+                            container.appendChild(div);
+                        }
+                    }
+                })
+            }
         }
     });
     
@@ -120,6 +190,10 @@ $fMessages = new Form();
         setInterval(() => {
             joinedRooms(token); // повтор каждые 60 секунд
         }, 60000);
+        
+        setInterval(() => {
+            sync(token); // повтор каждые 60 секунд
+        }, 2000);
     });
     
     function formEvent(id, params, onSuccess){

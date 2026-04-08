@@ -3,6 +3,7 @@ use wco\kernel\WCO;
 use app\models\Users;
 use app\models\Rooms;
 use app\models\Events;
+use app\models\EventJson;
 
 /**
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
@@ -11,6 +12,14 @@ use app\models\Events;
 class V1Controller extends \wco\kernel\Controller{
     public function actionIndex() {
         
+        return true;
+    }
+    
+    public function actionSync() {
+        $mEventJson = new Events();
+        
+        header('Content-Type: application/json');
+        echo $mEventJson->sync();
         return true;
     }
     
@@ -52,6 +61,8 @@ class V1Controller extends \wco\kernel\Controller{
     
     public function actionRooms() {
         $mEvents = new Events();
+        
+        header('Content-Type: application/json');
         echo $mEvents->create();
         
         return true;

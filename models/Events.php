@@ -81,4 +81,35 @@ class Events extends DB{
             'event_id' => $eventId
         ]);
     }
+    
+    public function sync() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            return json_encode(["error" => "\"Invalid token\" error"]);
+        }
+        
+        $since = filter_input(INPUT_GET, 'since');
+        
+        $mEventJson = new EventJson();
+        
+        $test = $this->select("*")->form();
+                
+        if($since){
+            $test->where("received_ts > $since");
+        }
+        
+        $test->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id")
+            ->order_by('received_ts ASC')->limit(10);
+        
+        $result = $this->fetchAll();
+        $arr = [];
+        
+        foreach ($result as $key=>$event){
+            $arr[$key] = $event;
+            $arr[$key]['json'] = json_decode($event['json']);
+        }
+        
+        return json_encode($arr);
+    }
 }
