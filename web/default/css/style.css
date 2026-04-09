@@ -48,6 +48,11 @@ body{
     backdrop-filter: blur(10px);
 }
 
+.chat .room{
+    background-color: #0003;
+    padding-left: 5px;
+}
+
 .messages{
     height: 100%;
 }
