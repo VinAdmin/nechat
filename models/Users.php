@@ -66,10 +66,12 @@ class Users extends DB{
         $this->select()->form()->where("user_id = :user_id");
         $result = $this->fetch(['user_id' => $user_id]);
         
-        if ($result) {
-            if (!password_verify($password, $result['password'])) {
-                return json_encode(["error" => "Incorrect login or password"]);
-            }
+        if (!$result) {
+            return json_encode(["error" => "Incorrect login or password"]);
+        }
+        
+        if (!password_verify($password, $result['password'])) {
+            return json_encode(["error" => "Incorrect login or password"]);
         }
         
         $mAccessToken = new AccessToken();

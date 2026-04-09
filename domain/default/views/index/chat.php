@@ -25,7 +25,7 @@ $fMessages = new Form();
             
         </div>
         <?=$fMessages->FormStart('sendMessage')?>
-        <div class="messageComposer">
+        <div class="messageComposer" id="messageComposer" style="display: none;">
             <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput'])->Field()?>
             <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', 'Отправить', [
                     'class' => 'btn btn-primary'
@@ -63,8 +63,37 @@ $fMessages = new Form();
 
 <script>
     sessionStorage.setItem("sync", "");
+    let room = {};
     
-    window.room = {};
+    function content(){
+        const hash = window.location.hash;
+        const roomId = hash.replace('#room_', '');
+        const container = document.getElementById('messages');
+        container.innerHTML = '';
+        
+        if(!room[roomId]){
+            return;
+        }
+        
+        const data = room[roomId];
+        data.forEach(room => {
+            if (!Object.hasOwn(room.json, 'content')) {
+                return;
+            }
+
+            if(!Object.hasOwn(room.json.content, 'body')){
+                return;
+            }
+            
+            const div = document.createElement('div');
+            div.className = 'msg';
+
+            div.innerHTML = `
+                ${room.json.content.body}
+            `;
+            container.appendChild(div);
+        })
+    }
     
     async function sync(token) {
         const res = await fetch('/api/v1/sync/?since=' + sessionStorage.getItem("sync"), {
@@ -84,30 +113,20 @@ $fMessages = new Form();
             return;
         }
         
-        const container = document.getElementById('messages');
-        //container.innerHTML = '';
-        
         data.forEach(msg => {
             if(sessionStorage.getItem("sync") === '' || sessionStorage.getItem("sync") < msg.received_ts){
-                const div = document.createElement('div');
-                div.className = 'msg';
-
-                div.innerHTML = `
-                    ${msg.json.content.body}
-                `;
                 
-                container.appendChild(div);
-                
-                console.log(msg.json);
-                if (!window.room[msg.room_id]) {
-                    window.room[msg.room_id] = [];
+                if (!room[msg.room_id]) {
+                    room[msg.room_id] = [];
                 }
 
-                window.room[msg.room_id].push(msg);
+                room[msg.room_id].push(msg);
             }
             
             sessionStorage.setItem("sync", msg.received_ts);
         });
+        
+        content();
     }
     
     async function joinedRooms(token) {
@@ -128,6 +147,10 @@ $fMessages = new Form();
         const container = document.getElementById('rooms');
         container.innerHTML = '';
         
+        if(data.length === 0){ //Очистка якоря если комнат нет
+            history.replaceState(null, null, window.location.pathname);
+        }
+        
         data.forEach(room => {
             const div = document.createElement('div');
             div.className = 'room';
@@ -140,6 +163,20 @@ $fMessages = new Form();
         });
     }
     
+    let currentRoom = null;
+    function selectRoom(roomId) {
+        currentRoom = roomId;
+
+        document.getElementById('messageComposer').style.display = 'flex';
+    }
+    
+    const hash = window.location.hash;
+    const roomId = hash.replace('#room_', '');
+    
+    if(roomId){
+        selectRoom(roomId);
+    }
+    
     <!-- Событие на выбор комнаты -->
     document.addEventListener('click', (e) => {
         const link = e.target.closest('.room-link');
@@ -149,51 +186,14 @@ $fMessages = new Form();
 
             const hash = link.getAttribute('href').substring(1);
             const roomId = hash.replace('room_', '');
-
+            
+            selectRoom(roomId);
+            
             // если хочешь — обновить URL
             window.location.hash = link.getAttribute('href');
             localStorage.setItem('room_id', roomId);
-            
-            const container = document.getElementById('messages');
-            container.innerHTML = '';
-            
-            if(window.room[roomId]){
-                const data = window.room[roomId];
-                //console.log(data);
-                data.forEach(room => {
-                    if (Object.hasOwn(item.json, 'content')) {
-                        if(Object.hasOwn(item.json.content, 'body')){
-                            const div = document.createElement('div');
-                            div.className = 'msg';
-                            console.log(room.json);
-
-                            div.innerHTML = `
-                                ${item.json.content.body}
-                            `;
-                            container.appendChild(div);
-                        }
-                    }
-                })
-            }
+            content();
         }
-    });
-    
-    document.addEventListener("DOMContentLoaded", () => {
-        const token = localStorage.getItem('token');
-        
-        if (token === null) {
-            window.location.href = '/';
-        }
-        
-        joinedRooms(token);
-        
-        setInterval(() => {
-            joinedRooms(token); // повтор каждые 60 секунд
-        }, 60000);
-        
-        setInterval(() => {
-            sync(token); // повтор каждые 60 секунд
-        }, 2000);
     });
     
     function formEvent(id, params, onSuccess){
@@ -261,6 +261,27 @@ $fMessages = new Form();
         room: true,
         type: 'text',
     },function(e){
-        console.log(e);
+        if(e.error){
+            notify(e.error, 'warning', 3000 * 5);
+            return;
+        }
+    });
+    
+    document.addEventListener("DOMContentLoaded", () => {
+        const token = localStorage.getItem('token');
+        
+        if (token === null) {
+            window.location.href = '/';
+        }
+        
+        joinedRooms(token);
+        
+        setInterval(() => {
+            joinedRooms(token); // повтор каждые 60 секунд
+        }, 60000);
+        
+        setInterval(() => {
+            sync(token); // повтор каждые 60 секунд
+        }, 1000);
     });
 </script>
