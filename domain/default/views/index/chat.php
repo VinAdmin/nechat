@@ -38,7 +38,7 @@ $fMessages = new Form();
                 <div id="room-title">{{ roomName }}</div>
             </div>
 
-            <div class="messages">
+            <div class="messages" ref="messages">
                 <div v-for="msg in messages"
                      class="msg">
                     {{ msg.json?.content?.body }}

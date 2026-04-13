@@ -90,17 +90,18 @@ class Events extends DB{
         }
         
         $since = filter_input(INPUT_GET, 'since');
+        $since = strip_tags($since);
         
         $mEventJson = new EventJson();
         
         $test = $this->select("*")->form();
+        $test->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
                 
         if($since){
             $test->where("received_ts > $since");
         }
         
-        $test->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id")
-            ->order_by('received_ts ASC')->limit(10);
+        $test->order_by('received_ts ASC')->limit(1000);
         
         $result = $this->fetchAll();
         $arr = [];

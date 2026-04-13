@@ -55,6 +55,8 @@ body{
 
 .messages{
     height: 100%;
+    overflow: auto;
+    white-space:nowrap;
 }
 
 .messageComposer{

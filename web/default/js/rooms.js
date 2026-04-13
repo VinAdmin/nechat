@@ -83,8 +83,27 @@ const app = Vue.createApp({
             modal.hide();
             form.reset();
         },
+        
+        isAtBottom() {
+            const el = this.$refs.messages;
+            if (!el) return true;
+
+            return el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+        },
+
+        scrollToBottom(smooth = true) {
+            const el = this.$refs.messages;
+            if (!el) return;
+
+            el.scrollTo({
+                top: el.scrollHeight,
+                behavior: smooth ? 'smooth' : 'auto'
+            });
+        },
 
         updateMessages() {
+            const shouldScroll = this.isAtBottom();
+            
             if (!this.messagesStore[this.roomId]) {
                 this.messages = [];
                 return;
@@ -93,6 +112,12 @@ const app = Vue.createApp({
             this.messages = this.messagesStore[this.roomId].filter(m =>
                 m.json?.content?.body
             );
+    
+            this.$nextTick(() => {
+                if (shouldScroll) {
+                    this.scrollToBottom();
+                }
+            });
         },
 
         async sync() {
@@ -117,7 +142,7 @@ const app = Vue.createApp({
                     this.messagesStore[msg.room_id] = [];
                 }
 
-                if (!this.syncToken === '' || this.syncToken < msg.received_ts) {
+                if (!this.syncToken || this.syncToken < msg.received_ts) {
                     this.messagesStore[msg.room_id].push(msg);
                 }
 
