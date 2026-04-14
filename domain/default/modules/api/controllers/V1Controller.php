@@ -17,10 +17,16 @@ class V1Controller extends \wco\kernel\Controller{
     }
     
     public function actionSync() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            return json_encode(["error" => "\"Invalid token\" error"]);
+        }
+        
         $mEventJson = new Events();
         
         header('Content-Type: application/json');
-        echo $mEventJson->sync();
+        echo $mEventJson->sync($mAccesToken->sender);
         return true;
     }
     
@@ -58,20 +64,51 @@ class V1Controller extends \wco\kernel\Controller{
         return true;
     }
     
+    /**
+     * Возвращает список текущих комнат пользователя.
+     * 
+     * @return bool
+     */
     public function actionJoined_rooms() {
+        $mAccesToken = new AccessToken();
+
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            
+            return true;
+        }
+        
         $mRooms = new Rooms();
         
         header('Content-Type: application/json');
-        echo $mRooms->joinedRooms();
+        echo $mRooms->joinedRooms($mAccesToken->sender);
         
         return true;
     }
     
     public function actionRooms() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            
+            return true;
+        }
+        
+        $mRooms = new Rooms();
+        
+        if(!$mRooms->accessRoom($mAccesToken->sender)){
+            http_response_code(401);
+            echo json_encode(["error" => "Messages are not allowed in this room."]);
+            
+            return true;
+        }
+        
         $mEvents = new Events();
         
         header('Content-Type: application/json');
-        echo $mEvents->create();
+        echo $mEvents->create($mAccesToken->sender);
         
         return true;
     }

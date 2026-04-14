@@ -30,4 +30,21 @@ class RoomMemberships extends DB{
         $this->insert($col);
         return [];
     }
+    
+    /**
+     * @param string $sender
+     * @return array
+     */
+    public function getMember(string $sender): array {
+        $membership = "membership IN ('join','invite')";
+        
+        $this->select()->form()->where("user_id = :user_id AND $membership");
+        $res = $this->fetch(['user_id' => $sender]);
+        
+        if(!$res){
+           $res = []; 
+        }
+        
+        return $res;
+    }
 }

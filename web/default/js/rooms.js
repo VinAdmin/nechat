@@ -30,7 +30,7 @@ const app = Vue.createApp({
             const data = await res.json();
 
             if (data.error) {
-                notify(data.error, 'warning', 5000);
+                notify(data.error, 'warning', 4000);
                 window.location.href = '/';
                 return;
             }

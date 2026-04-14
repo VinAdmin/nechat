@@ -45,14 +45,8 @@ class Events extends DB{
         return $eventId;
     }
     
-    public function create() {
+    public function create($sender) {
         $data = json_decode(file_get_contents("php://input"), true);
-        
-        $mAccesToken = new AccessToken();
-        if (!$mAccesToken->getToken()) {
-            http_response_code(401);
-            return json_encode(["error" => "\"Invalid token\" error"]);
-        }
         
         if(!isset($data['room_id'])){
             http_response_code(401);
@@ -75,14 +69,14 @@ class Events extends DB{
         $eventId = $this->addEvent([
             'type'    => $type,
             'room_id' => $room['room_id'],
-            'sender'  => $mAccesToken->sender,
+            'sender'  => $sender,
         ]);
         
         $json = json_encode([
             'content' => [
                 'body'    => $data['body'],
                 'room_id' => $room['room_id'],
-                'sender'  => $mAccesToken->sender
+                'sender'  => $sender
             ]
         ]);
         
@@ -99,26 +93,25 @@ class Events extends DB{
         ]);
     }
     
-    public function sync() {
-        $mAccesToken = new AccessToken();
-        if (!$mAccesToken->getToken()) {
-            http_response_code(401);
-            return json_encode(["error" => "\"Invalid token\" error"]);
-        }
-        
+    public function sync($sender) {
         $since = filter_input(INPUT_GET, 'since');
         $since = strip_tags($since);
         
         $mEventJson = new EventJson();
+        $mRoomMemberships = new RoomMemberships();
         
-        $test = $this->select("*")->form();
-        $test->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
-                
+        $sql = $this->select("*")->form();
+        $sql->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
+        $sql->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id");
+        
+        $membership = "m.membership IN ('join')";
         if($since){
-            $test->where("received_ts > $since");
+            $sql->where("received_ts > $since AND $membership");
+        }else{
+            $sql->where("$membership");
         }
         
-        $test->order_by('received_ts ASC')->limit(1000);
+        $sql->order_by('received_ts ASC')->limit(1000);
         
         $result = $this->fetchAll();
         $arr = [];

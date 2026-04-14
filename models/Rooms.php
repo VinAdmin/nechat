@@ -72,16 +72,30 @@ class Rooms extends DB{
         return json_encode(["error" => "Unknown error"]);
     }
     
-    public function joinedRooms() {
-        $mAccesToken = new AccessToken();
-
-        if (!$mAccesToken->getToken()) {
-            http_response_code(401);
-            return json_encode(["error" => "\"Invalid token\" error"]);
+    public function accessRoom(string $sender): bool {
+        $mRoomMemberships = new RoomMemberships();
+        $mem = $mRoomMemberships->getMember($sender);
+        
+        if(!isset($mem['user_id'])){
+            return false;
         }
         
-        $this->select()->form();
-        return json_encode($this->fetchAll());
+        return true;
+    }
+    
+    /**
+     * Комнаты участника.
+     * 
+     * @param string $sender
+     * @return string
+     */
+    public function joinedRooms(string $sender): string {
+        $mRoomMemberships = new RoomMemberships();
+        
+        $this->select("*")->form()
+                ->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id")
+                ->where("m.user_id = :user_id AND m.membership IN ('join')");
+        return json_encode($this->fetchAll(['user_id' => $sender]));
     }
     
     public function getRoomId(string $roomId): array {
