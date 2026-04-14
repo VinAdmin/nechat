@@ -18,9 +18,11 @@ class V1Controller extends \wco\kernel\Controller{
     
     public function actionSync() {
         $mAccesToken = new AccessToken();
+        
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            return json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
         }
         
         $mEventJson = new Events();

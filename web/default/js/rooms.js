@@ -135,6 +135,8 @@ const app = Vue.createApp({
 
             if (data.error) {
                 notify(data.error, 'warning', 5000);
+                localStorage.clear();
+                window.location.href = '/';
                 return;
             }
             
