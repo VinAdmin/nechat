@@ -23,7 +23,11 @@ class AccessToken extends DB{
         return 'access_tokens';
     }
     
-    public function createToken($user_id) {
+    /**
+     * @param string $user_id
+     * @return string
+     */
+    public function createToken(string $user_id): string {
         $payload = [
             "user_id" => $user_id,
             "exp" => time() + 3600 // 1 час
@@ -51,7 +55,7 @@ class AccessToken extends DB{
         $token = trim(strip_tags($token));
         $mUsers = new Users();
         
-        $this->select()->form()->joinInner(['u' => $mUsers->init()], "u.id = t1.user_id")->where('token = :token');
+        $this->select()->form()->joinInner(['u' => $mUsers->init()], "u.user_id = t1.user_id")->where('token = :token');
         $result = $this->fetch(['token' => $token]);
         
         if(isset($result['token'])){

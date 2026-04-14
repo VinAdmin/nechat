@@ -24,6 +24,27 @@ class Events extends DB{
         return 'events';
     }
     
+    /**
+     * Добавляет событие.
+     * 
+     * @param array $params [type, room_id, sender]
+     * @return string
+     */
+    public function addEvent($params): string {
+        $uuid = Uuid::uuid4()->toString();
+        $eventId = "$$uuid";
+        
+        $this->insert([
+            'event_id'    => $eventId,
+            'type'        => $params['type'],
+            'room_id'     => $params['room_id'],
+            'sender'      => $params['sender'],
+            'received_ts' => time()
+        ]);
+        
+        return $eventId;
+    }
+    
     public function create() {
         $data = json_decode(file_get_contents("php://input"), true);
         
@@ -42,8 +63,6 @@ class Events extends DB{
             $type = strip_tags($data['msgtype']);
         }
         
-        $uuid = Uuid::uuid4()->toString();
-        $eventId = "$$uuid";
         $room_id = strip_tags($data['room_id']);
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($room_id);
@@ -53,12 +72,10 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
         
-        $this->insert([
-            'event_id'    => $eventId,
-            'type'        => $type,
-            'room_id'     => $room['room_id'],
-            'sender'      => $mAccesToken->sender,
-            'received_ts' => time()
+        $eventId = $this->addEvent([
+            'type'    => $type,
+            'room_id' => $room['room_id'],
+            'sender'  => $mAccesToken->sender,
         ]);
         
         $json = json_encode([

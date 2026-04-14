@@ -13,7 +13,7 @@ $aut = new Form();
 <div>
     <?=$aut->FormStart('authorization', 'POST', '')?>
     <div><?=$aut->Input('text', 'login')->Field()?></div>
-    <div><?=$aut->Input('text', 'password')->Field()?></div>
+    <div><?=$aut->Input('password', 'password')->Field()?></div>
     <div><?=$aut->Input(Form::INPUT_SUBMIT, 'aut', 'Авторизация')->Field()?></div>
 </div>
 
@@ -25,7 +25,7 @@ $aut = new Form();
 
 <script>
     document.addEventListener("DOMContentLoaded", () => {
-        if (localStorage.getItem('token') !== null) {
+        if (localStorage.getItem('token') !== null && localStorage.getItem('token') !== '') {
             window.location.href = '/chat';
         }
     });

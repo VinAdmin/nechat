@@ -5,6 +5,8 @@ use wco\db\DB;
 use wco\kernel\WCO;
 use app\models\AccessToken;
 use Ramsey\Uuid\Uuid;
+use app\models\RoomMemberships;
+use app\models\Events;
 
 /**
  * Description of Rooms
@@ -24,16 +26,11 @@ class Rooms extends DB{
     /**
      * Создание комнаты
      * 
+     * @param string $sender Отправитель
      * @return string
      */
-    public function createRoom(): string {
+    public function createRoom(string $sender): string {
         $data = json_decode(file_get_contents("php://input"), true);
-        
-        $mAccesToken = new AccessToken();
-        if (!$mAccesToken->getToken()) {
-            http_response_code(401);
-            return json_encode(["error" => "\"Invalid token\" error"]);
-        }
         
         if(!isset($data['name'])){
             http_response_code(400);
@@ -48,8 +45,25 @@ class Rooms extends DB{
             $this->insert([
                 'room_id' => $room_id,
                 'name'    => $name,
-                'creator' => $mAccesToken->sender,
+                'creator' => $sender,
                 'cdate'   => time()
+            ]);
+            
+            $mRoomMemberships = new RoomMemberships();
+            $mEvents = new Events();
+            
+            $eventId = $mEvents->addEvent([
+                'type'    => 'create.room',
+                'room_id' => $room_id,
+                'sender'  => $sender
+            ]);
+            
+            $mRoomMemberships->addUser([
+                'event_id'    => $eventId,
+                'user_id'     => $sender,
+                'sender'      => $sender,
+                'room_id'     => $room_id,
+                'membership'  => 'join'
             ]);
             
             return json_encode(["status" => "ok"]);

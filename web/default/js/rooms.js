@@ -31,6 +31,7 @@ const app = Vue.createApp({
 
             if (data.error) {
                 notify(data.error, 'warning', 5000);
+                window.location.href = '/';
                 return;
             }
 

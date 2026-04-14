@@ -75,7 +75,12 @@ class Users extends DB{
         }
         
         $mAccessToken = new AccessToken();
-        $token = $mAccessToken->createToken($result['id']);
+        $token = $mAccessToken->createToken($result['user_id']);
+        
+        if(!$token){
+            http_response_code(401);
+            return json_encode(["error" => "Unable to obtain a token"]);
+        }
         
         return json_encode([
             "status"  => "ok",

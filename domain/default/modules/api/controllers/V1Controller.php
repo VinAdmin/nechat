@@ -4,6 +4,7 @@ use app\models\Users;
 use app\models\Rooms;
 use app\models\Events;
 use app\models\EventJson;
+use app\models\AccessToken;
 
 /**
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
@@ -42,10 +43,17 @@ class V1Controller extends \wco\kernel\Controller{
     }
     
     public function actionCreateRoom() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+        
         $mRooms = new Rooms();
         
         header('Content-Type: application/json');
-        echo $mRooms->createRoom();
+        echo $mRooms->createRoom($mAccesToken->sender);
         
         return true;
     }
