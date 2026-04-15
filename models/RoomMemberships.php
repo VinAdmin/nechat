@@ -12,6 +12,8 @@ use app\models\AccessToken;
  * @copyright (c) 2026, Olkhin Vitaliy
  */
 class RoomMemberships extends DB{
+    const IN_MEMBERSHIP = "membership IN ('join','invite')";
+
     function __construct() {
         parent::__construct();
     }
@@ -33,7 +35,7 @@ class RoomMemberships extends DB{
     
     /**
      * @param string $sender
-     * @return array
+     * @return array [event_id, user_id, sender, room_id, membership]
      */
     public function getMember(string $sender): array {
         $membership = "membership IN ('join','invite')";
@@ -42,6 +44,25 @@ class RoomMemberships extends DB{
         $res = $this->fetch(['user_id' => $sender]);
         
         if(!$res){
+           $res = []; 
+        }
+        
+        return $res;
+    }
+    
+    /**
+     * Возвращает список участников комнаты
+     * 
+     * @param string $room_id
+     * @return array [event_id, user_id, sender, room_id, membership]
+     */
+    public function getRoomMembers(string $room_id): array {
+        $this->select()->form()
+                ->where("room_id = :room_id");
+        
+        $res = $this->fetchAll(['room_id' => $room_id]);
+        
+        if(count($res) > 0){
            $res = []; 
         }
         
