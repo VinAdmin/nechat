@@ -62,7 +62,7 @@ class RoomMemberships extends DB{
         
         $res = $this->fetchAll(['room_id' => $room_id]);
         
-        if(count($res) > 0){
+        if(count($res) < 0){
            $res = []; 
         }
         
