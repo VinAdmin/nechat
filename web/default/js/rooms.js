@@ -11,7 +11,8 @@ const app = Vue.createApp({
             messages: [],
             roomId: null,
             roomName: '',
-            syncToken: ""
+            syncToken: "",
+            roomMembers: []
         }
     },
 
@@ -200,6 +201,29 @@ const app = Vue.createApp({
             }
 
             form.reset();
+        },
+        
+        async openMembers(room_id) {
+            const token = localStorage.getItem('token');
+            this.roomMembers = [];
+
+            const res = await fetch('/api/v1/rooms/'+room_id+'/members', {
+                method: 'GET',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await res.json();
+            console.log(result);
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+            
+            this.roomMembers = result;
         }
     },
 

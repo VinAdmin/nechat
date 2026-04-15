@@ -35,7 +35,14 @@ $fMessages = new Form();
         <!-- Чат -->
         <div class="chat">
             <div class="room">
-                <div id="room-title">{{ roomName }}</div>
+                <div class="row">
+                    <div id="room-title" class="col-lg-11">{{ roomName }}</div>
+                    <div class="col-lg-1">
+                        <button class="btn btn-primary" data-bs-toggle="modal" @click.prevent="openMembers(roomId)" data-bs-target="#members">
+                            Участники
+                        </button>
+                    </div>
+                </div>
             </div>
 
             <div class="messages" ref="messages">
@@ -80,6 +87,24 @@ $fMessages = new Form();
                         ])->Field()?>
                 </div>
                 <?=$fCreateRoom->FormEnd()?>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Участники -->
+    <div class="modal fade" id="members" tabindex="-1" aria-labelledby="membersLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLabel">Участники</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <div class="list-group">
+                        <a v-for="member in roomMembers" href="#" class="list-group-item list-group-item-action list-group-item-primary">{{ member.user_id }}</a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

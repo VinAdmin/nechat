@@ -5,6 +5,8 @@ use app\models\Rooms;
 use app\models\Events;
 use app\models\EventJson;
 use app\models\AccessToken;
+use app\models\RoomMemberships;
+use app\models\Filter;
 
 /**
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
@@ -110,8 +112,50 @@ class V1Controller extends \wco\kernel\Controller{
         $mEvents = new Events();
         
         header('Content-Type: application/json');
+        
+        $members = $this->members();
+        if(count($members) > 0){
+            $mRoomMemberships = new RoomMemberships();
+            $mem = $mRoomMemberships->getRoomMembers($members['room_id']);
+            
+            echo json_encode($mem);
+            return true;
+        }
+        
         echo $mEvents->create($mAccesToken->sender);
         
         return true;
+    }
+    
+    private function decodeUriRoom(string $uri): array {
+        $arr = [];
+        $members = '';
+        
+        if($uri){
+            $params = explode('/', $uri);
+            $params = array_diff($params, array(''));
+            
+            //$url[4] - room_id
+            if(isset($params[4])){
+                $arr['room_id'] = Filter::string($params[4]);
+            }
+            
+            if(isset($params[5])){
+                $members = Filter::string($params[5]);
+            }
+            
+            if($members == 'members'){
+                $arr['members'] = $members;
+                return $arr;
+            }
+        }
+        
+        return $arr;
+    }
+    
+    private function members() {
+        $uri = filter_input(INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL);
+        
+        return $this->decodeUriRoom($uri);
     }
 }
