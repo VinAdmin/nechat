@@ -55,7 +55,7 @@ class AccessToken extends DB{
         $token = trim(strip_tags($token));
         $mUsers = new Users();
         
-        $this->select()->form()->joinInner(['u' => $mUsers->init()], "u.user_id = t1.user_id")->where('token = :token');
+        $this->select()->from()->joinInner(['u' => $mUsers->init()], "u.user_id = t1.user_id")->where('token = :token');
         $result = $this->fetch(['token' => $token]);
         
         if(isset($result['token'])){

@@ -100,7 +100,7 @@ class Events extends DB{
         $mEventJson = new EventJson();
         $mRoomMemberships = new RoomMemberships();
         
-        $sql = $this->select("*")->form();
+        $sql = $this->select("*")->from();
         $sql->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
         $sql->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id");
         

@@ -92,7 +92,7 @@ class Rooms extends DB{
     public function joinedRooms(string $sender): string {
         $mRoomMemberships = new RoomMemberships();
         
-        $this->select("*")->form()
+        $this->select("*")->from()
                 ->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id")
                 ->where("m.user_id = :user_id AND m.membership IN ('join')");
         return json_encode($this->fetchAll(['user_id' => $sender]));
@@ -100,7 +100,7 @@ class Rooms extends DB{
     
     public function getRoomId(string $roomId): array {
         $result = [];
-        $this->select()->form()->where("room_id = :room_id");
+        $this->select()->from()->where("room_id = :room_id");
         $result = $this->fetch(['room_id' => $roomId]);
         
         if(!empty($result)){

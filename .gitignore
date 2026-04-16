@@ -7,6 +7,7 @@ composer.lock
 *.db3
 composer.lock
 components/phpliteadmin.config.php
+composer.old.json
 
 core/UpdateSystems/project/*
 template/default/libre/ckeditor4-major/kcfinder/cache/*

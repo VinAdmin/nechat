@@ -22,7 +22,7 @@ class Users extends DB{
     }
     
     public function checkUser($user_id): bool {
-        $this->select()->form()->where("user_id = :user_id");
+        $this->select()->from()->where("user_id = :user_id");
         $result = $this->fetch(['user_id' => $user_id]);
         
         if(isset($result['user_id'])){
@@ -63,7 +63,7 @@ class Users extends DB{
         $user_id = "@" . strip_tags($data['login']). ":" . WCO::$domain;
         $password = strip_tags($data['password']);
         
-        $this->select()->form()->where("user_id = :user_id");
+        $this->select()->from()->where("user_id = :user_id");
         $result = $this->fetch(['user_id' => $user_id]);
         
         if (!$result) {

@@ -40,7 +40,7 @@ class RoomMemberships extends DB{
     public function getMember(string $sender): array {
         $membership = "membership IN ('join','invite')";
         
-        $this->select()->form()->where("user_id = :user_id AND $membership");
+        $this->select()->from()->where("user_id = :user_id AND $membership");
         $res = $this->fetch(['user_id' => $sender]);
         
         if(!$res){
@@ -57,7 +57,7 @@ class RoomMemberships extends DB{
      * @return array [event_id, user_id, sender, room_id, membership]
      */
     public function getRoomMembers(string $room_id): array {
-        $this->select()->form()
+        $this->select()->from()
                 ->where("room_id = :room_id");
         
         $res = $this->fetchAll(['room_id' => $room_id]);
