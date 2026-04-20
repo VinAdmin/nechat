@@ -13,6 +13,8 @@ use app\models\AccessToken;
  * @copyright (c) 2026, Olkhin Vitaliy
  */
 class Users extends DB{
+    private $user_id = null;
+            
     function __construct() {
         parent::__construct();
     }
@@ -21,15 +23,34 @@ class Users extends DB{
         return 'users';
     }
     
-    public function checkUser($user_id): bool {
+    /**
+     * Проверка пользователя в базе данных.
+     * 
+     * @param string $user_id
+     * @return bool true, false
+     */
+    public function checkUser(string $user_id): bool {
+       $user_id = strip_tags($user_id);
+        
         $this->select()->from()->where("user_id = :user_id");
         $result = $this->fetch(['user_id' => $user_id]);
         
         if(isset($result['user_id'])){
+            $this->user_id = $result['user_id'];
+            
             return true;
         }
         
         return false;
+    }
+    
+    /**
+     * Возвращает из базы данных ид пользователя.
+     * 
+     * @return string
+     */
+    public function getUserId(): string {
+        return $this->user_id;
     }
     
     public function registration(): string {
@@ -81,6 +102,8 @@ class Users extends DB{
             http_response_code(401);
             return json_encode(["error" => "Unable to obtain a token"]);
         }
+        
+        $this->user_id = $result['user_id'];
         
         return json_encode([
             "status"  => "ok",
