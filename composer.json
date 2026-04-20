@@ -1,6 +1,6 @@
 {
-    "name": "vinadmin/chat",
-    "description": "Web optimization coding framework",
+    "name": "vinadmin/nechat",
+    "description": "Chat, a website based on the WCO core. Still under development.",
     "type": "project",
     "authors": [
         {

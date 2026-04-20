@@ -1,13 +1,9 @@
 body{
-    background-image: url(../images/s1200.webp);
+    background: #000 url(../images/background.png) no-repeat;
     -webkit-background-size: cover;
     -moz-background-size: cover;
     -o-background-size: cover;
     background-size: cover;
-}
-
-.left_block{
-    margin-bottom: 10px;
 }
 
 .content{
@@ -15,6 +11,28 @@ body{
     padding-bottom: 15px;
     margin-bottom: 15px;
 }
+
+.block-authorisation{
+    background-color: rgba(255,255,255,0.13);
+    position: absolute;
+    transform: translate(-50%,-50%);
+    top: 30%;
+    left: 50%;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    border: 2px solid rgba(255,255,255,0.1);
+    box-shadow: 0 0 40px rgba(8,7,16,0.6);
+    padding: 50px 35px;
+}
+
+form *{
+    font-family: 'Poppins',sans-serif;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+    outline: none;
+    border: none;
+}
+
 .nav_breadcrumb{
     margin-top: 10px;
 }
