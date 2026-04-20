@@ -68,4 +68,28 @@ class RoomMemberships extends DB{
         
         return $res;
     }
+    
+    /**
+     * Возвращает участника комнаты.
+     * 
+     * @param string $room_id
+     * @param string $userId
+     * @return array [event_id, user_id, sender, room_id, membership]
+     */
+    public function getRoomMember(string $room_id, string $userId): array {
+        $this->select()->from()
+                ->where("room_id = :room_id AND user_id = :user_id");
+        
+        $res = $this->fetch([
+            'room_id' => $room_id,
+            'user_id' => $userId
+        ]);
+        
+        if(isset($res['user_id'])){
+           return $res;
+        }
+        
+        $res = [];
+        return $res;
+    }
 }
