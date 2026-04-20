@@ -98,6 +98,12 @@ class Rooms extends DB{
         return json_encode($this->fetchAll(['user_id' => $sender]));
     }
     
+    /**
+     * Возвращает данные по комнате.
+     * 
+     * @param string $roomId
+     * @return array [room_id, creator, name, topic, cdate]
+     */
     public function getRoomId(string $roomId): array {
         $result = [];
         $this->select()->from()->where("room_id = :room_id");
