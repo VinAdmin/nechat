@@ -8,6 +8,8 @@ use app\models\AccessToken;
 
 /**
  * Описание класса: Работа c пользователем.
+ * 
+ * @property string $user_id по умолчанию null
  *
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
  * @copyright (c) 2026, Olkhin Vitaliy
@@ -47,9 +49,9 @@ class Users extends DB{
     /**
      * Возвращает из базы данных ид пользователя.
      * 
-     * @return string
+     * @return string Если не было запроса для БД значение по умолчанию null
      */
-    public function getUserId(): string {
+    public function getUserId(): string | null {
         return $this->user_id;
     }
     
