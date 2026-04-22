@@ -238,12 +238,31 @@ class V1Controller extends \wco\kernel\Controller{
         $targetUserId = $mUser->getUserId();
         
         if(!isset($member['user_id'])){
+            $type = 'm.room.member';
+            
             $mEvents = new Events();
             
             $eventId = $mEvents->addEvent([
-                'type'    => 'm.room.member',
+                'type'    => $type,
                 'room_id' => $params['roomId'],
                 'sender'  => $params['sender'],
+            ]);
+            
+            $mEventJson = new EventJson();
+            
+            $json = json_encode([
+                'type'   => $type,
+                'sender' => $params['sender'],
+                'content' => [
+                    'displayname' => $targetUserId,
+                    'membership'  => 'invite'
+                ]
+            ]);
+            
+            $mEventJson->add([
+                'event_id' => $eventId,
+                'room_id'  => $params['roomId'],
+                'json'     => $json
             ]);
 
             $mRoomMemberships->addUser([
