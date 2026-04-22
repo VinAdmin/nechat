@@ -232,50 +232,13 @@ class V1Controller extends \wco\kernel\Controller{
             return json_encode(['error' => 'Unable to find user']);
         }
         
-        $mRoomMemberships = new RoomMemberships();
-        $member = $mRoomMemberships->getRoomMember($params['roomId'], $userId);
-        
         $targetUserId = $mUser->getUserId();
         
         if(!isset($member['user_id'])){
-            $type = 'm.room.member';
-            
-            $mEvents = new Events();
-            
-            $eventId = $mEvents->addEvent([
-                'type'    => $type,
-                'room_id' => $params['roomId'],
-                'sender'  => $params['sender'],
-            ]);
-            
-            $mEventJson = new EventJson();
-            
-            $json = json_encode([
-                'type'   => $type,
-                'sender' => $params['sender'],
-                'content' => [
-                    'displayname' => $targetUserId,
-                    'membership'  => 'invite'
-                ]
-            ]);
-            
-            $mEventJson->add([
-                'event_id' => $eventId,
-                'room_id'  => $params['roomId'],
-                'json'     => $json
-            ]);
-
-            $mRoomMemberships->addUser([
-                'event_id'   => $eventId,
-                'user_id'    => $targetUserId,
-                'sender'     => $params['sender'],
-                'room_id'    => $params['roomId'],
-                'membership' => 'invite'
-            ]);
-            
-            return json_encode(['status' => 'ok']);
+            $modelEvent = new Events();
+            $modelEvent->invite($params['roomId'], $targetUserId, $params['sender']);
         }
         
-        return json_encode(['error' => 'Unknown error']);
+        return json_encode(['status' => 'ok']);
     }
 }

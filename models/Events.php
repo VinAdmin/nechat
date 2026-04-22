@@ -117,18 +117,67 @@ class Events extends DB{
         $arr = [];
         
         $i = 0;
-        foreach ($result as $event){
+        foreach ($result as $key => $event){
             if($event['membership'] === 'invite'){
-                $arr[$i]['rooms']['invite'][$event['room_id']] = [];
-                continue;
+                $arr[$key]['rooms']['invite'][$event['room_id']] = [];
+                //continue;
             }
             
-            $arr[$i] = $event;
-            $arr[$i]['json'] = json_decode($event['json']);
+            $arr[$key] = $event;
+            $arr[$key]['json'] = json_decode($event['json']);
             
             $i++;
         }
         
         return json_encode($arr);
+    }
+    
+    /**
+     * @param string $roomId
+     * @param string $userId
+     * @param string $sender
+     * @param string $membership По умолчанию invite
+     * @return bool
+     */
+    public function invite(string $roomId, string $userId, string $sender, string $membership = 'invite'): bool {
+        $mRoomMemberships = new RoomMemberships();
+        $member = $mRoomMemberships->getRoomMember($roomId, $userId);
+        
+        $type = 'm.room.member';
+
+        $eventId = $this->addEvent([
+            'type'    => $type,
+            'room_id' => $roomId,
+            'sender'  => $sender,
+        ]);
+
+        $mEventJson = new EventJson();
+        
+        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $userId);
+
+        $json = json_encode([
+            'type'   => $type,
+            'sender' => $sender,
+            'content' => [
+                'displayname' => $displayname,
+                'membership'  => $membership
+            ]
+        ]);
+
+        $mEventJson->add([
+            'event_id' => $eventId,
+            'room_id'  => $roomId,
+            'json'     => $json
+        ]);
+
+        $mRoomMemberships->addUser([
+            'event_id'   => $eventId,
+            'user_id'    => $userId,
+            'sender'     => $sender,
+            'room_id'    => $roomId,
+            'membership' => $membership
+        ]);
+
+        return true;
     }
 }
