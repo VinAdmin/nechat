@@ -93,7 +93,7 @@ class Events extends DB{
         ]);
     }
     
-    public function sync($sender) {
+    public function sync(string $sender): string {
         $since = filter_input(INPUT_GET, 'since');
         $since = strip_tags($since);
         
@@ -104,7 +104,7 @@ class Events extends DB{
         $sql->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
         $sql->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id");
         
-        $membership = "m.membership IN ('join')";
+        $membership = "m.membership IN ('join', 'invite')";
         if($since){
             $sql->where("received_ts > $since AND $membership");
         }else{
@@ -116,9 +116,17 @@ class Events extends DB{
         $result = $this->fetchAll();
         $arr = [];
         
-        foreach ($result as $key=>$event){
-            $arr[$key] = $event;
-            $arr[$key]['json'] = json_decode($event['json']);
+        $i = 0;
+        foreach ($result as $event){
+            if($event['membership'] === 'invite'){
+                $arr[$i]['rooms']['invite'][$event['room_id']] = [];
+                continue;
+            }
+            
+            $arr[$i] = $event;
+            $arr[$i]['json'] = json_decode($event['json']);
+            
+            $i++;
         }
         
         return json_encode($arr);
