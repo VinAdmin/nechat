@@ -1,8 +1,8 @@
-/* 
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/Other/javascript.js to edit this template
- */
-
+ /**
+ * @author Olkhin Vitaliy <ovvitalik@gmail.com>
+ * @copyright (c) 2026, Olkhin Vitaliy
+ **/
+ 
 const app = Vue.createApp({
     data() {
         return {
@@ -224,6 +224,33 @@ const app = Vue.createApp({
             }
             
             this.roomMembers = result;
+        },
+        
+        async invite(e) {
+            e.preventDefault();
+
+            const form = e.target;
+            const token = localStorage.getItem('token');
+
+            const data = Object.fromEntries(new FormData(form).entries());
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/invite', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            form.reset();
         }
     },
 
@@ -256,6 +283,9 @@ const app = Vue.createApp({
             this.roomId = roomId;
             this.roomName = localStorage.getItem('room_name');
         }
+        
+        document.getElementById('formInvite')
+            .addEventListener('submit', this.invite);
     }
 });
 

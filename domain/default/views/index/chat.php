@@ -4,6 +4,7 @@ use wco\forms\Form;
 $this->title = 'Чат';
 $fCreateRoom = new Form();
 $fMessages = new Form();
+$fInvite = new Form();
 ?>
 <div id="app">
 
@@ -70,7 +71,7 @@ $fMessages = new Form();
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="exampleModalLabel">Создание комнаты</h5>
+                    <h5 class="modal-title" id="createModalLabel">Создание комнаты</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 
@@ -96,14 +97,48 @@ $fMessages = new Form();
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="exampleModalLabel">Участники</h5>
+                    <h5 class="modal-title" id="membersModalLabel">Участники</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 
                 <div class="modal-body">
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#invite">
+                        Пригласить
+                    </button>
+                    
                     <div class="list-group">
                         <a v-for="member in roomMembers" href="#" class="list-group-item list-group-item-action list-group-item-primary">{{ member.user_id }}</a>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Пригласить -->
+    <div class="modal fade" id="invite" tabindex="-1" aria-labelledby="inviteLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="exampleModalLabel">Пригласить в {{ roomName }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                
+                <div class="modal-body">
+                    <p>Пригласите кого-нибудь, используя его имя, имя пользователя (например, @username:<?=wco\kernel\WCO::$domain?>).</p>
+                    <hr>
+                    <?=$fInvite->FormStart('formInvite', 'POST')?>
+                        <div class="row">
+                            <div class="col-md-8"><?=$fCreateRoom->Input('text', 'user_id')->Field()?></div>
+                            <div class="col-md-4">
+                                <?=$fInvite->Input(Form::INPUT_SUBMIT, 'sendInvite', 'Пригласить', [
+                                    'class' => 'btn btn-primary'
+                                ])->Field()?>
+                            </div>
+                        </div>
+                    <?=$fInvite->FormEnd()?>
+                </div>
+                <div class="modal-footer">
+                        
                 </div>
             </div>
         </div>
