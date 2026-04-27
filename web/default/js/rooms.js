@@ -110,7 +110,7 @@ const app = Vue.createApp({
                 this.messages = [];
                 return;
             }
-
+            
             this.messages = this.messagesStore[this.roomId].filter(m =>
                 m.json?.content?.body
             );
@@ -133,7 +133,7 @@ const app = Vue.createApp({
             });
 
             const data = await res.json();
-
+            
             if (data.error) {
                 notify(data.error, 'warning', 5000);
                 localStorage.clear();
@@ -141,18 +141,27 @@ const app = Vue.createApp({
                 return;
             }
             
-            data.forEach(msg => {
-                if (!this.messagesStore[msg.room_id]) {
-                    this.messagesStore[msg.room_id] = [];
+            const rooms = data.rooms?.join || {};
+            
+            for(const roomId in rooms){
+                const events = rooms[roomId].events || {};
+                
+                for(const event of events){
+                    if (!this.messagesStore[roomId]) {
+                        this.messagesStore[roomId] = [];
+                    }
+                    
+                    if (!this.messagesStore[roomId].some(e => e.event_id === event.event_id)) {
+                        //this.messagesStore[roomId].push(event);
+                    }
+                    this.messagesStore[roomId].push(event);
+                    //console.log(this.messagesStore[roomId].some(e => e.event_id === event.event_id));
+                    //this.messagesStore[roomId].push(events[event]);
                 }
-
-                if (!this.syncToken || this.syncToken < msg.received_ts) {
-                    this.messagesStore[msg.room_id].push(msg);
-                }
-
-                this.syncToken = msg.received_ts;
-            });
-
+            }
+            
+            this.syncToken = data.next_batch || this.syncToken;
+            
             sessionStorage.setItem("sync", this.syncToken);
 
             this.updateMessages();

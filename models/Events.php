@@ -53,9 +53,17 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
         
-        if(isset($data['msgtype'])){
-            $type = strip_tags($data['msgtype']);
+        if(!isset($data['msgtype'])){
+            http_response_code(401);
+            return json_encode(["error" => "Message type not specified"]);
         }
+        $type = strip_tags($data['msgtype']);
+        
+        if(!isset($data['body'])){
+            http_response_code(401);
+            return json_encode(["error" => "Body error"]);
+        }
+        $body = strip_tags($data['body']);
         
         $room_id = strip_tags($data['room_id']);
         $mRooms = new Rooms();
@@ -73,8 +81,13 @@ class Events extends DB{
         ]);
         
         $json = json_encode([
+            'event_id' => $eventId,
+            'type'     => $type,
+            'room_id'  => $room['room_id'],
+            'sender'   => $sender,
+            'origin_server_ts' => round(microtime(true) * 1000),
             'content' => [
-                'body'    => $data['body'],
+                'body'    => $body,
                 'room_id' => $room['room_id'],
                 'sender'  => $sender
             ]
@@ -114,18 +127,26 @@ class Events extends DB{
         $sql->order_by('received_ts ASC')->limit(1000);
         
         $result = $this->fetchAll();
+        
         $arr = [];
+        $arr['rooms']['join'] = [];
+        $arr['next_batch'] = 0;
         
         $i = 0;
         foreach ($result as $key => $event){
-            if($event['membership'] === 'invite'){
+            /*if($event['membership'] === 'invite'){
                 $arr[$key]['rooms']['invite'][$event['room_id']] = [];
                 //continue;
+            }*/
+            
+            $arr['rooms']['join'][$event['room_id']]['events'][] = [
+                'event_id' => $event['event_id'],
+                'json' => json_decode($event['json'])
+            ];
+            
+            if($arr['next_batch'] < $event['received_ts']){
+                $arr['next_batch'] = $event['received_ts'];
             }
-            
-            $arr[$key] = $event;
-            $arr[$key]['json'] = json_decode($event['json']);
-            
             $i++;
         }
         
