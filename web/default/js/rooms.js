@@ -146,17 +146,14 @@ const app = Vue.createApp({
             for(const roomId in rooms){
                 const events = rooms[roomId].events || {};
                 
+                if (!this.messagesStore[roomId]) {
+                    this.messagesStore[roomId] = [];
+                }
+                
                 for(const event of events){
-                    if (!this.messagesStore[roomId]) {
-                        this.messagesStore[roomId] = [];
-                    }
+                    if (!event?.event_id) continue;
                     
-                    if (!this.messagesStore[roomId].some(e => e.event_id === event.event_id)) {
-                        //this.messagesStore[roomId].push(event);
-                    }
                     this.messagesStore[roomId].push(event);
-                    //console.log(this.messagesStore[roomId].some(e => e.event_id === event.event_id));
-                    //this.messagesStore[roomId].push(events[event]);
                 }
             }
             
