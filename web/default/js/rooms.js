@@ -152,7 +152,6 @@ const app = Vue.createApp({
                 
                 for(const event of events){
                     if (!event?.event_id) continue;
-                    
                     this.messagesStore[roomId].push(event);
                 }
             }

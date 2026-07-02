@@ -91,3 +91,77 @@ form *{
 .msgInput{
     width: 50%;
 }
+
+.msg{
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.msg + .msg{
+    margin-top: 4px;
+}
+
+.msg-sender{
+    font-size: 0.8em;
+    color: #8ab4f8;
+    margin-bottom: 2px;
+}
+
+.msg-body{
+    color: #fff;
+    word-break: break-word;
+    white-space: pre-wrap;
+}
+
+.msg-audio audio{
+    width: 280px;
+    height: 40px;
+}
+
+.messages{
+    white-space: normal;
+}
+
+.mic-btn{
+    margin: 0 4px;
+}
+
+.mic-btn.recording{
+    background-color: #dc3545;
+    border-color: #dc3545;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse{
+    0%, 100%{ opacity: 1; }
+    50%{ opacity: 0.5; }
+}
+
+.voice-preview{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    margin: 4px 0;
+}
+
+.voice-preview audio{
+    height: 36px;
+}
+
+.invited-section{
+    padding: 0 8px;
+}
+
+.invited-section h6{
+    color: #ffc107;
+}
+
+.invited-room{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
