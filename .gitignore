@@ -17,4 +17,5 @@ nbproject/
 packages/
 vendor/
 storage/*
-web/default/uploads/*
+web/default/uploads/
+.vscode
