@@ -169,7 +169,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -305,6 +305,42 @@ class V1Controller extends \wco\kernel\Controller{
 
         if (!$updateResult) {
             return json_encode(['error' => 'Unable to ban user']);
+        }
+
+        return json_encode(['status' => 'ok']);
+    }
+
+    /**
+     * Снимает бан с пользователя в комнате.
+     * 
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function unban(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        if(count($this->data) === 0 || !isset($this->data['user_id'])){
+            return json_encode(['error' => 'Not user_id']);
+        }
+
+        $mFilter = new Filter();
+        $userId = $mFilter->string($this->data['user_id']);
+
+        $mRoomMemberships = new RoomMemberships();
+        $updateResult = $mRoomMemberships->Update([
+            'membership' => 'join',
+            'room_id' => $params['roomId'],
+            'user_id' => $userId
+        ], 'room_id = :room_id AND user_id = :user_id');
+
+        if (!$updateResult) {
+            return json_encode(['error' => 'Unable to unban user']);
         }
 
         return json_encode(['status' => 'ok']);

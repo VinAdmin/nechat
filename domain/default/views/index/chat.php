@@ -123,8 +123,12 @@ $fInvite = new Form();
                     
                     <div class="list-group">
                         <div v-for="member in roomMembers" class="list-group-item list-group-item-action list-group-item-primary d-flex justify-content-between align-items-center">
-                            {{ member.user_id }}
-                            <button class="btn btn-danger btn-sm" @click="ban(member.user_id)">Забанить</button>
+                            <span>
+                                {{ member.user_id }}
+                                <span v-if="member.membership === 'ban'" class="badge bg-danger ms-2">Забанен</span>
+                            </span>
+                            <button v-if="member.membership === 'ban'" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
+                            <button v-else class="btn btn-danger btn-sm" @click="ban(member.user_id)">Забанить</button>
                         </div>
                     </div>
                 </div>
