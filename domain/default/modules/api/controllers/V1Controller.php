@@ -19,9 +19,15 @@ class V1Controller extends \wco\kernel\Controller{
 
     function __construct() {
         parent::__construct();
-        $this->data = json_decode(file_get_contents("php://input"), true);
-        
-        if (json_last_error() !== JSON_ERROR_NONE) {
+
+        $rawInput = file_get_contents("php://input");
+        $jsonData = json_decode($rawInput, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+            $this->data = $jsonData;
+        } elseif (!empty($_POST)) {
+            $this->data = $_POST;
+        } else {
             $this->data = [];
         }
     }

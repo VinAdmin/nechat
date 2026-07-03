@@ -47,34 +47,146 @@ class Events extends DB{
     
     public function create($sender) {
         $data = json_decode(file_get_contents("php://input"), true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+            $data = $_POST;
+        }
         
-        if(!isset($data['room_id'])){
+        if (!isset($data['room_id'])) {
             http_response_code(401);
             return json_encode(["error" => "Room not found"]);
         }
-        
-        if(!isset($data['msgtype'])){
-            http_response_code(401);
-            return json_encode(["error" => "Message type not specified"]);
-        }
-        $type = strip_tags($data['msgtype']);
-        
-        if(!isset($data['body'])){
-            http_response_code(401);
-            return json_encode(["error" => "Body error"]);
-        }
-        $body = strip_tags($data['body']);
         
         $room_id = strip_tags($data['room_id']);
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($room_id);
         
-        if(!isset($room['room_id'])){
+        if (!isset($room['room_id'])) {
             http_response_code(401);
             return json_encode(["error" => "Room not found"]);
         }
-        
-        if($type == 'm.text'){
+
+        $type = isset($data['msgtype']) ? strip_tags($data['msgtype']) : 'm.text';
+        $body = isset($data['body']) ? strip_tags($data['body']) : '';
+        $fileUrl = null;
+        $fileName = null;
+        $fileType = null;
+        $fileSize = null;
+
+        $uploadDir = __DIR__ . '/../web/default/uploads';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true);
+        }
+
+        $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;
+        $chunkIndex = isset($data['chunk_index']) ? (int)$data['chunk_index'] : 0;
+        $uploadId = isset($data['upload_id']) ? strip_tags($data['upload_id']) : null;
+        $fileSize = isset($data['file_size']) ? (int)$data['file_size'] : null;
+
+        if ($type === 'm.file' && !empty($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
+            $fileInfo = $_FILES['file'];
+            $tempDir = $uploadDir . '/tmp';
+            $chunkDir = $tempDir . '/' . preg_replace('/[^A-Za-z0-9_-]/', '', $uploadId);
+
+            if ($chunkCount > 1 && $chunkIndex > 0 && $uploadId) {
+                if (!is_dir($chunkDir)) {
+                    mkdir($chunkDir, 0755, true);
+                }
+
+                $chunkFile = $chunkDir . '/chunk_' . $chunkIndex;
+                if (!move_uploaded_file($fileInfo['tmp_name'], $chunkFile)) {
+                    http_response_code(500);
+                    return json_encode(["error" => "Upload failed"]);
+                }
+
+                if ($chunkIndex < $chunkCount) {
+                    return json_encode([
+                        'status' => 'chunk_received',
+                        'chunk_index' => $chunkIndex,
+                        'chunk_count' => $chunkCount
+                    ]);
+                }
+
+                $fileName = isset($data['file_name']) ? basename(strip_tags($data['file_name'])) : basename($fileInfo['name']);
+                $safeName = preg_replace('/[^A-Za-z0-9_\-.]/', '_', $fileName);
+                $uniqueName = time() . '_' . bin2hex(random_bytes(8)) . '_' . $safeName;
+                $destination = $uploadDir . '/' . $uniqueName;
+
+                $out = fopen($destination, 'wb');
+                if (!$out) {
+                    http_response_code(500);
+                    return json_encode(["error" => "Unable to write file"]);
+                }
+
+                for ($i = 1; $i <= $chunkCount; $i++) {
+                    $partPath = $chunkDir . '/chunk_' . $i;
+                    if (!is_file($partPath)) {
+                        fclose($out);
+                        http_response_code(500);
+                        return json_encode(["error" => "Missing chunk {$i}"]);
+                    }
+
+                    $in = fopen($partPath, 'rb');
+                    if (!$in) {
+                        fclose($out);
+                        http_response_code(500);
+                        return json_encode(["error" => "Unable to read chunk {$i}"]);
+                    }
+
+                    while (!feof($in)) {
+                        $buffer = fread($in, 1048576);
+                        fwrite($out, $buffer);
+                    }
+                    fclose($in);
+                    unlink($partPath);
+                }
+
+                fclose($out);
+                @rmdir($chunkDir);
+                $fileUrl = '/default/uploads/' . $uniqueName;
+                $fileType = $fileInfo['type'];
+                if ($fileSize === null) {
+                    $fileSize = filesize($destination);
+                }
+                if (empty($body)) {
+                    $body = $fileName;
+                }
+
+                if ($type === 'm.text') {
+                    $type = 'm.file';
+                }
+            } else {
+                $fileName = basename($fileInfo['name']);
+                $safeName = preg_replace('/[^A-Za-z0-9_\-.]/', '_', $fileName);
+                $uniqueName = time() . '_' . bin2hex(random_bytes(8)) . '_' . $safeName;
+                $destination = $uploadDir . '/' . $uniqueName;
+
+                if (!move_uploaded_file($fileInfo['tmp_name'], $destination)) {
+                    http_response_code(500);
+                    return json_encode(["error" => "Upload failed"]);
+                }
+
+                $fileUrl = '/default/uploads/' . $uniqueName;
+                $fileType = $fileInfo['type'];
+                if ($fileSize === null) {
+                    $fileSize = (int)$fileInfo['size'];
+                }
+
+                if (empty($body)) {
+                    $body = $fileName;
+                }
+
+                if ($type === 'm.text') {
+                    $type = 'm.file';
+                }
+            }
+        }
+
+        if ($type === 'm.text') {
+            if (empty($body)) {
+                http_response_code(401);
+                return json_encode(["error" => "Body error"]);
+            }
+
             $modelRoomMemberships = new RoomMemberships();
             $modelRoomMemberships->select()->from()
                     ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
@@ -82,29 +194,55 @@ class Events extends DB{
                 'sender' => $sender,
                 'room_id' => $room['room_id'],
             ]);
-            if($membership_res){        //Если найдена хоть одна запись 'ban', 'invite' запрещаем отправку сообщения в комнату
+            if ($membership_res) {
+                http_response_code(401);
+                return json_encode(["error" => "Sending a message is prohibited"]);
+            }
+        } elseif ($type === 'm.file') {
+            if (!$fileUrl) {
+                http_response_code(401);
+                return json_encode(["error" => "File upload error"]);
+            }
+
+            $modelRoomMemberships = new RoomMemberships();
+            $modelRoomMemberships->select()->from()
+                    ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
+            $membership_res = $modelRoomMemberships->fetch([
+                'sender' => $sender,
+                'room_id' => $room['room_id'],
+            ]);
+            if ($membership_res) {
                 http_response_code(401);
                 return json_encode(["error" => "Sending a message is prohibited"]);
             }
         }
-        
-        $eventId = $this->addEvent([    //Создание события
+
+        $eventId = $this->addEvent([
             'type'    => $type,
             'room_id' => $room['room_id'],
             'sender'  => $sender,
         ]);
         
-        $json = json_encode([           //Кодирование в json
+        $content = [
+            'body'    => $body,
+            'room_id' => $room['room_id'],
+            'sender'  => $sender
+        ];
+
+        if ($fileUrl) {
+            $content['file_url'] = $fileUrl;
+            $content['file_name'] = $fileName;
+            $content['file_type'] = $fileType;
+            $content['file_size'] = $fileSize;
+        }
+
+        $json = json_encode([
             'event_id' => $eventId,
             'type'     => $type,
             'room_id'  => $room['room_id'],
             'sender'   => $sender,
             'origin_server_ts' => round(microtime(true) * 1000),
-            'content' => [
-                'body'    => $body,
-                'room_id' => $room['room_id'],
-                'sender'  => $sender
-            ]
+            'content' => $content
         ]);
         
         $mEventJson = new EventJson();  //Сохранение информациио событии

@@ -102,15 +102,32 @@ form *{
 }
 
 .messageComposer{
+    display: flex;
+    align-items: center;
+    gap: 10px;
     width: 100%;
-    -webkit-box-flex: 0;
-    -ms-flex: 0 0 auto;
-    flex: 0 0 auto;
+    flex-wrap: wrap;
     margin-right: 2px;
 }
 
+.messageComposer > .mb-2 {
+    margin-bottom: 0;
+}
+
 .msgInput{
-    width: 50%;
+    flex: 1;
+    min-width: 180px;
+}
+
+.file-upload-wrapper {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-upload-name {
+    max-width: 140px;
 }
 
 .msg{
@@ -145,6 +162,65 @@ form *{
     color: #fff;
     word-break: break-word;
     white-space: pre-wrap;
+}
+
+.chat-image {
+    max-width: 320px;
+    max-height: 300px;
+    width: auto;
+    height: auto;
+    display: block;
+    margin-bottom: 8px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.file-upload-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.file-input {
+    display: none;
+}
+
+.file-upload-button {
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 14px;
+    border-radius: 50px;
+    border: 1px solid rgba(255,255,255,0.35);
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+    transition: background .25s ease, transform .2s ease;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.file-upload-button:hover,
+.file-upload-button:focus {
+    background: rgba(255,255,255,0.18);
+    transform: translateY(-1px);
+}
+
+.file-upload-name {
+    font-size: 0.9em;
+    color: rgba(255,255,255,0.8);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 160px;
+}
+
+.image-preview {
+    max-width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+}
+
+.modal-content.bg-dark {
+    background: rgba(0, 0, 0, 0.95);
 }
 
 .msg-own {

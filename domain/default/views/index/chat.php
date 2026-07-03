@@ -63,15 +63,36 @@ $fInvite = new Form();
                         </div>
                     </div>
                     <div class="msg-body">
-                        {{ msg.json?.content?.body }}
+                        <div v-if="msg.json?.content?.file_url">
+                            <div v-if="msg.json.content.file_type?.startsWith('image/')">
+                                <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
+                            </div>
+                            <div v-else>
+                                <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
+                                    {{ msg.json.content.file_name || 'Файл' }}
+                                </a>
+                            </div>
+                        </div>
+                        <div v-if="msg.json?.content?.body">
+                            {{ msg.json.content.body }}
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Форма -->
-            <?=$fMessages->FormStart('sendMessage')?>
+            <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
             <div class="messageComposer" v-show="roomId">
-                <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput'])->Field()?>
+                <div class="mb-2">
+                    <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
+                </div>
+                <div class="mb-2 file-upload-wrapper">
+                    <input type="file" name="file" id="file" class="file-input" @change="onFileChange" />
+                    <label for="file" class="btn btn-outline-secondary file-upload-button">
+                        <span>Прикрепить файл</span>
+                    </label>
+                    <span class="file-upload-name" v-if="fileName">{{ fileName }}</span>
+                </div>
                 <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', 'Отправить', [
                     'class' => 'btn btn-primary'
                 ])->Field()?>
@@ -161,6 +182,20 @@ $fInvite = new Form();
                 </div>
                 <div class="modal-footer">
                         
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="imagePreviewModalLabel">{{ previewImageName }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body d-flex justify-content-center align-items-center p-0">
+                    <img :src="previewImage" :alt="previewImageName || 'Изображение'" class="image-preview" />
                 </div>
             </div>
         </div>

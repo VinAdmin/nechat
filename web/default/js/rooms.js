@@ -20,7 +20,10 @@ const app = Vue.createApp({
             roomName: '',
             roomMembership: null,
             syncToken: "",
-            roomMembers: []
+            roomMembers: [],
+            fileName: '',
+            previewImage: '',
+            previewImageName: ''
         }
     },
 
@@ -254,29 +257,107 @@ const app = Vue.createApp({
 
             const form = e.target;
             const token = localStorage.getItem('token');
+            const fileInput = form.querySelector('input[name="file"]');
+            const file = fileInput?.files?.[0];
+            const bodyText = form.querySelector('input[name="body"]')?.value || '';
 
-            const data = Object.fromEntries(new FormData(form).entries());
+            if (file && file.size > 5 * 1024 * 1024) {
+                await this.uploadFileInChunks({
+                    form,
+                    token,
+                    file,
+                    bodyText,
+                    roomId: this.roomId
+                });
+            } else {
+                const formData = new FormData(form);
+                formData.set('room_id', this.roomId);
+                formData.set('msgtype', file ? 'm.file' : 'm.text');
 
-            data.msgtype = 'm.text';
-            data.room_id = this.roomId;
+                const res = await fetch('/api/v1/rooms/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                });
 
-            const res = await fetch('/api/v1/rooms/', {
-                method: 'POST',
-                headers: {
-                    "Authorization": "Bearer " + token,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
+                const result = await res.json();
 
-            const result = await res.json();
-
-            if (result.error) {
-                notify(result.error, 'warning', 5000);
-                return;
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
             }
 
             form.reset();
+            this.fileName = '';
+        },
+
+        async uploadFileInChunks({form, token, file, bodyText, roomId}) {
+            const chunkSize = 5 * 1024 * 1024; // 5 MB
+            const chunkCount = Math.ceil(file.size / chunkSize);
+            const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+
+            for (let index = 1; index <= chunkCount; index++) {
+                const chunk = file.slice((index - 1) * chunkSize, index * chunkSize);
+                const formData = new FormData();
+                formData.append('room_id', roomId);
+                formData.append('msgtype', 'm.file');
+                formData.append('upload_id', uploadId);
+                formData.append('chunk_index', index);
+                formData.append('chunk_count', chunkCount);
+                formData.append('file_name', file.name);
+                formData.append('file_size', file.size);
+                if (index === chunkCount && bodyText) {
+                    formData.append('body', bodyText);
+                }
+                formData.append('file', chunk, file.name);
+
+                const res = await fetch('/api/v1/rooms/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                });
+
+                const result = await res.json();
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    throw new Error(result.error);
+                }
+
+                if (result.status === 'error') {
+                    notify(result.error || 'Ошибка загрузки чанка', 'warning', 5000);
+                    throw new Error(result.error || 'Upload error');
+                }
+            }
+        },
+
+        /**
+         * Обновляет название выбранного файла в интерфейсе.
+         * @param {Event} e
+         */
+        onFileChange(e) {
+            const file = e.target.files?.[0];
+            this.fileName = file ? file.name : '';
+        },
+
+        /**
+         * Показывает увеличенное изображение в модальном окне.
+         * @param {string} url
+         * @param {string} name
+         */
+        viewImage(url, name) {
+            this.previewImage = url;
+            this.previewImageName = name || 'Изображение';
+
+            const modalEl = document.getElementById('imagePreviewModal');
+            if (modalEl) {
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            }
         },
 
         /**
