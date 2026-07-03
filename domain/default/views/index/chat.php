@@ -37,10 +37,15 @@ $fInvite = new Form();
         <div class="chat">
             <div class="room">
                 <div class="row">
-                    <div id="room-title" class="col-lg-11">{{ roomName }}</div>
+                    <div id="room-title" class="col-lg-9">{{ roomName }}</div>
                     <div class="col-lg-1">
                         <button class="btn btn-primary" data-bs-toggle="modal" @click.prevent="openMembers(roomId)" data-bs-target="#members">
                             Участники
+                        </button>
+                    </div>
+                    <div class="col-lg-1" v-if="roomMembership === 'invite'">
+                        <button class="btn btn-success" @click.prevent="acceptInvite">
+                            Принять
                         </button>
                     </div>
                 </div>
@@ -48,8 +53,18 @@ $fInvite = new Form();
 
             <div class="messages" ref="messages">
                 <div v-for="msg in messages"
-                     class="msg">
-                    {{ msg.json?.content?.body }}
+                     :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                    <div class="msg-header">
+                        <div class="msg-author" v-if="msg.json?.content?.sender">
+                            {{ msg.json.content.sender }}
+                        </div>
+                        <div class="msg-time" v-if="formatTime(msg)">
+                            {{ formatTime(msg) }}
+                        </div>
+                    </div>
+                    <div class="msg-body">
+                        {{ msg.json?.content?.body }}
+                    </div>
                 </div>
             </div>
 

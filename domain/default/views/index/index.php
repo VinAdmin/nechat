@@ -83,6 +83,9 @@ $aut = new Form();
         }
 
         localStorage.setItem('token', result.token);
+        if (result.user_id) {
+            localStorage.setItem('user_id', result.user_id);
+        }
         window.location.href = '/chat';
         form.reset();
         return;

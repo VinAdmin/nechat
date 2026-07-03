@@ -3,14 +3,22 @@
  * @copyright (c) 2026, Olkhin Vitaliy
  **/
  
+/**
+ * Vue-приложение для управления интерфейсом чата и данными.
+ */
 const app = Vue.createApp({
+    /**
+     * Реактивное состояние для приложения чата.
+     * @returns {{rooms: Array, messagesStore: Object, messages: Array, roomId: string|null, roomName: string, roomMembership: string|null, syncToken: string, roomMembers: Array}}
+     */
     data() {
         return {
             rooms: [],
-            messagesStore: {}, // как твой room {}
+            messagesStore: {}, // кеш сообщений по room_id
             messages: [],
             roomId: null,
             roomName: '',
+            roomMembership: null,
             syncToken: "",
             roomMembers: []
         }
@@ -18,9 +26,15 @@ const app = Vue.createApp({
 
     methods: {
 
+        /**
+         * Загружает список комнат, в которые вошёл текущий пользователь.
+         * Обновляет локальный массив комнат и состояние участия пользователя.
+         * @returns {Promise<void>}
+         */
         async joinedRooms() {
             const token = localStorage.getItem('token');
 
+            // Запрашиваем комнаты, в которых состоит текущий пользователь.
             const res = await fetch('/api/v1/joined_rooms/', {
                 headers: {
                     "Authorization": "Bearer " + token,
@@ -38,14 +52,27 @@ const app = Vue.createApp({
 
             this.rooms = data;
 
+            if (this.roomId) {
+                const currentRoom = this.rooms.find(room => room.room_id === this.roomId);
+                this.roomMembership = currentRoom ? currentRoom.membership : this.roomMembership;
+            }
+
             if (data.length === 0) {
                 history.replaceState(null, null, window.location.pathname);
             }
         },
 
+        /**
+         * Выбирает и открывает комнату из списка.
+         * @param {Object} room
+         * @param {string} room.room_id
+         * @param {string} room.name
+         * @param {string} [room.membership]
+         */
         openRoom(room) {
             this.roomId = room.room_id;
             this.roomName = room.name;
+            this.roomMembership = room.membership || null;
 
             localStorage.setItem('room_id', room.room_id);
             localStorage.setItem('room_name', room.name);
@@ -55,6 +82,11 @@ const app = Vue.createApp({
             this.updateMessages();
         },
         
+        /**
+         * Создаёт новую комнату через запрос API и обновляет список комнат.
+         * @param {SubmitEvent} e
+         * @returns {Promise<void>}
+         */
         async createRoom(e){
             e.preventDefault();
             
@@ -86,6 +118,10 @@ const app = Vue.createApp({
             form.reset();
         },
         
+        /**
+         * Проверяет, находится ли контейнер сообщений внизу.
+         * @returns {boolean}
+         */
         isAtBottom() {
             const el = this.$refs.messages;
             if (!el) return true;
@@ -93,6 +129,10 @@ const app = Vue.createApp({
             return el.scrollHeight - el.scrollTop - el.clientHeight < 50;
         },
 
+        /**
+         * Прокручивает контейнер сообщений вниз.
+         * @param {boolean} [smooth=true]
+         */
         scrollToBottom(smooth = true) {
             const el = this.$refs.messages;
             if (!el) return;
@@ -103,6 +143,9 @@ const app = Vue.createApp({
             });
         },
 
+        /**
+         * Обновляет отображаемый массив сообщений из кеша для активной комнаты.
+         */
         updateMessages() {
             const shouldScroll = this.isAtBottom();
             
@@ -122,6 +165,10 @@ const app = Vue.createApp({
             });
         },
 
+        /**
+         * Опрос сервера на новые события / сообщения и слияние их в локальный кеш.
+         * @returns {Promise<void>}
+         */
         async sync() {
             const token = localStorage.getItem('token');
 
@@ -177,6 +224,9 @@ const app = Vue.createApp({
             this.updateMessages();
         },
 
+        /**
+         * Анализирует текущий хеш локации и восстанавливает состояние выбранной комнаты.
+         */
         parseHash() {
             const hash = window.location.hash.substring(1);
             const params = new URLSearchParams(hash);
@@ -187,11 +237,18 @@ const app = Vue.createApp({
             if (id) {
                 this.roomId = id;
                 this.roomName = name || localStorage.getItem('room_name');
+                const currentRoom = this.rooms.find(room => room.room_id === id);
+                this.roomMembership = currentRoom ? currentRoom.membership : this.roomMembership;
 
                 this.updateMessages();
             }
         },
 
+        /**
+         * Отправляет текстовое сообщение в текущую открытую комнату.
+         * @param {SubmitEvent} e
+         * @returns {Promise<void>}
+         */
         async sendMessage(e) {
             e.preventDefault();
 
@@ -221,7 +278,38 @@ const app = Vue.createApp({
 
             form.reset();
         },
+
+        /**
+         * Определяет, было ли сообщение отправлено текущим пользователем.
+         * @param {Object} msg
+         * @returns {boolean}
+         */
+        isOwnMessage(msg) {
+            const currentUser = localStorage.getItem('user_id');
+            const sender = msg.json?.content?.sender || null;
+            return currentUser && sender === currentUser;
+        },
+
+        /**
+         * Форматирует метку времени сообщения для отображения.
+         * @param {Object} msg
+         * @returns {string|null}
+         */
+        formatTime(msg) {
+            const ts = msg.received_ts || msg.json?.origin_server_ts || (typeof msg.json === 'string' ? JSON.parse(msg.json).origin_server_ts : null);
+            if (!ts) {
+                return null;
+            }
+
+            const date = new Date(ts);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        },
         
+        /**
+         * Получает и отображает список участников комнаты для выбранной комнаты.
+         * @param {string} room_id
+         * @returns {Promise<void>}
+         */
         async openMembers(room_id) {
             const token = localStorage.getItem('token');
             this.roomMembers = [];
@@ -244,7 +332,55 @@ const app = Vue.createApp({
             
             this.roomMembers = result;
         },
+
+        /**
+         * Обрабатывает открытие модального окна приглашения и проверяет выбор комнаты.
+         */
+        openInvite() {
+            if (!this.roomId) {
+                notify('Выберите комнату перед приглашением', 'warning', 4000);
+                return;
+            }
+        },
+
+        /**
+         * Принимает приглашение в текущую комнату через API.
+         * @returns {Promise<void>}
+         */
+        async acceptInvite() {
+            if (!this.roomId) {
+                notify('Выберите комнату для принятия приглашения', 'warning', 4000);
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/accept', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            notify('Вы приняли приглашение в комнату', 'success', 4000);
+            this.roomMembership = 'join';
+            this.joinedRooms();
+        },
         
+        /**
+         * Отправляет приглашение пользователю в текущую комнату.
+         * @param {SubmitEvent} e
+         * @returns {Promise<void>}
+         */
         async invite(e) {
             e.preventDefault();
 

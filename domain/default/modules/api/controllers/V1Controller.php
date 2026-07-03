@@ -169,7 +169,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite'];
+            $allowed = ['members', 'invite', 'accept'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -242,6 +242,35 @@ class V1Controller extends \wco\kernel\Controller{
             $modelEvent->invite($params['roomId'], $targetUserId, $params['sender']);
         }
         
+        return json_encode(['status' => 'ok']);
+    }
+    
+    /**
+     * Принятие приглашения в комнату.
+     * 
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function accept(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        $mRoomMemberships = new RoomMemberships();
+        $updateResult = $mRoomMemberships->Update([
+            'membership' => 'join',
+            'room_id' => $params['roomId'],
+            'user_id' => $params['sender']
+        ], 'room_id = :room_id AND user_id = :user_id');
+
+        if (!$updateResult) {
+            return json_encode(['error' => 'Unable to accept invite']);
+        }
+
         return json_encode(['status' => 'ok']);
     }
 }
