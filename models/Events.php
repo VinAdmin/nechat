@@ -113,9 +113,10 @@ class Events extends DB{
      * @return string Список событий
      */
     public function sync(string $sender): string {
-        $since = filter_input(INPUT_GET, 'since');
-        if(!is_null($since)){
-            $since = strip_tags($since);
+        $since = filter_input(INPUT_GET, 'since', FILTER_VALIDATE_INT);
+
+        if ($since === false) {
+            $since = null;
         }
         
         $mEventJson = new EventJson();
@@ -125,22 +126,19 @@ class Events extends DB{
         $sql->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
         $sql->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id AND m.user_id = :sender AND m.membership IN ('join','invite')");
         
-        if($since){
-            $sql->where("t1.received_ts > $since");
-        }else{
-            $sql->where("m.membership IN ('join', 'invite')");
+        $params = ['sender' => $sender];
+        if($since !== null){
+            $sql->where("t1.received_ts > :since");
+            $params['since'] = $since;
         }
         
         $sql->order_by('received_ts ASC')->limit(1000);
         
-        $result = $this->fetchAll([
-            'sender' => $sender
-        ]);
+        $result = $this->fetchAll($params);
         
         $arr = [];
         $arr['next_batch'] = 0;
         
-        $i = 0;
         foreach ($result as $key => $event){
             if($event['membership'] === 'invite'){                          // Если это приглашение, то добавляем в массив invite
                 $arr['rooms']['invite'][$event['room_id']] = [];
@@ -149,14 +147,13 @@ class Events extends DB{
             if($event['membership'] === 'join'){                            // Если это присоединение, то добавляем в массив join
                 $arr['rooms']['join'][$event['room_id']]['events'][] = [
                     'event_id' => $event['event_id'],
-                    'json' => json_decode($event['json'])
+                    'json' => json_decode($event['json'], true)
                 ];
             }
 
             if($arr['next_batch'] < $event['received_ts']){                 // Если текущий next_batch меньше, чем received_ts события, то обновляем next_batch
                 $arr['next_batch'] = $event['received_ts'];
             }
-            $i++;
         }
         
         return json_encode($arr);
