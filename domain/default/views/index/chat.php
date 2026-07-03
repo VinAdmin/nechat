@@ -122,7 +122,10 @@ $fInvite = new Form();
                     </button>
                     
                     <div class="list-group">
-                        <a v-for="member in roomMembers" href="#" class="list-group-item list-group-item-action list-group-item-primary">{{ member.user_id }}</a>
+                        <div v-for="member in roomMembers" class="list-group-item list-group-item-action list-group-item-primary d-flex justify-content-between align-items-center">
+                            {{ member.user_id }}
+                            <button class="btn btn-danger btn-sm" @click="ban(member.user_id)">Забанить</button>
+                        </div>
                     </div>
                 </div>
             </div>

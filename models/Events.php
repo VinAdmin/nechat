@@ -74,13 +74,27 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
         
-        $eventId = $this->addEvent([
+        if($type == 'm.text'){
+            $modelRoomMemberships = new RoomMemberships();
+            $modelRoomMemberships->select()->from()
+                    ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
+            $membership_res = $modelRoomMemberships->fetch([
+                'sender' => $sender,
+                'room_id' => $room['room_id'],
+            ]);
+            if($membership_res){        //Если найдена хоть одна запись 'ban', 'invite' запрещаем отправку сообщения в комнату
+                http_response_code(401);
+                return json_encode(["error" => "Sending a message is prohibited"]);
+            }
+        }
+        
+        $eventId = $this->addEvent([    //Создание события
             'type'    => $type,
             'room_id' => $room['room_id'],
             'sender'  => $sender,
         ]);
         
-        $json = json_encode([
+        $json = json_encode([           //Кодирование в json
             'event_id' => $eventId,
             'type'     => $type,
             'room_id'  => $room['room_id'],
@@ -93,7 +107,7 @@ class Events extends DB{
             ]
         ]);
         
-        $mEventJson = new EventJson();
+        $mEventJson = new EventJson();  //Сохранение информациио событии
         $mEventJson->add([
             'event_id' => $eventId,
             'room_id'  => $room['room_id'],

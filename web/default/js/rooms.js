@@ -406,6 +406,34 @@ const app = Vue.createApp({
             }
 
             form.reset();
+        },
+
+        /**
+         * Банит пользователя в текущей комнате.
+         * @param {string} userId
+         * @returns {Promise<void>}
+         */
+        async ban(userId) {
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/ban', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: userId })
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            notify('Пользователь забанен', 'success', 4000);
+            this.openMembers(this.roomId);
         }
     },
 
