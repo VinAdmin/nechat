@@ -94,7 +94,7 @@ class Rooms extends DB{
         
         $this->select("*")->from()
                 ->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id")
-                ->where("m.user_id = :user_id AND m.membership IN ('join')");
+                ->where("m.user_id = :user_id AND m.membership IN ('join','invite')");
         return json_encode($this->fetchAll(['user_id' => $sender]));
     }
     

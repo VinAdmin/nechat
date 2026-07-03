@@ -87,15 +87,18 @@ class V1Controller extends \wco\kernel\Controller{
      * @return bool
      */
     public function actionJoined_rooms() {
+        //Проверка токена доступа.
         $mAccesToken = new AccessToken();
 
         if (!$mAccesToken->getToken()) {
+            //Ошибка если токен не валидный
             http_response_code(401);
             echo json_encode(["error" => "\"Invalid token\" error"]);
             
             return true;
         }
         
+        //Получение списка комнат пользователя
         $mRooms = new Rooms();
         
         header('Content-Type: application/json');

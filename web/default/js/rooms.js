@@ -155,6 +155,20 @@ const app = Vue.createApp({
                     this.messagesStore[roomId].push(event);
                 }
             }
+
+            const invite = data.rooms?.invite || {};
+            for(const roomId in invite){
+                const events = invite[roomId].invite_state.events || {};
+                
+                if (!this.messagesStore[roomId]) {
+                    this.messagesStore[roomId] = [];
+                }
+                
+                for(const event of events){
+                    if (!event?.event_id) continue;
+                    this.messagesStore[roomId].push(event);
+                }
+            }
             
             this.syncToken = data.next_batch || this.syncToken;
             

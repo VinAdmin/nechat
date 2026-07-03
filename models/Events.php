@@ -141,7 +141,11 @@ class Events extends DB{
         
         foreach ($result as $key => $event){
             if($event['membership'] === 'invite'){                          // Если это приглашение, то добавляем в массив invite
-                $arr['rooms']['invite'][$event['room_id']] = [];
+                $arr['rooms']['invite'][$event['room_id']] = [
+                    'invite_state' => [
+                        'events' => []
+                    ],
+                ];
             }
 
             if($event['membership'] === 'join'){                            // Если это присоединение, то добавляем в массив join
