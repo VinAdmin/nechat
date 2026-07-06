@@ -1,5 +1,7 @@
 html, body{
-    min-height: 100vh;
+    height: 100%;
+    margin: 0;
+    padding: 0;
 }
 
 body{
@@ -42,10 +44,22 @@ form *{
 }
 
 .prog_chat{
-    position: absolute;
     display: flex;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
     width: 100%;
+}
+
+#app{
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.rooms-toggle{
+    position: fixed;
+    z-index: 1040;
 }
 
 .rooms_board{
@@ -87,6 +101,7 @@ form *{
     -ms-flex: 1;
     flex: 1;
     min-width: 0;
+    min-height: 0;
     background: rgb(26 26 26 / 33%);
     backdrop-filter: blur(10px);
 }
@@ -101,12 +116,21 @@ form *{
 }
 
 .messages{
-    height: 100%;
-    overflow: auto;
-    white-space:nowrap;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.messages .list{
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    white-space: nowrap;
 }
 
 .messageComposer{
+    flex-shrink: 0;
     width: 100%;
     padding: 8px 12px;
 }
@@ -157,6 +181,14 @@ form *{
 
 .msg + .msg{
     margin-top: 4px;
+}
+
+.msg-date-separator{
+    text-align: center;
+    font-size: 0.78em;
+    color: #000;
+    padding: 12px 0 6px;
+    font-weight: 700;
 }
 
 .msg-header{
@@ -344,7 +376,7 @@ form *{
     height: 40px;
 }
 
-.messages{
+.messages .list{
     white-space: normal;
 }
 

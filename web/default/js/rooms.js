@@ -561,6 +561,24 @@ const app = Vue.createApp({
          * @param {Object} msg
          * @returns {string|null}
          */
+        msgDate(msg) {
+            const ts = msg.received_ts || msg.json?.origin_server_ts;
+            if (!ts) return null;
+            const d = new Date(ts);
+            return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+        },
+
+        showDateSeparator(msg, index) {
+            if (index === 0) return true;
+            const prev = this.messages[index - 1];
+            const prevTs = prev.received_ts || prev.json?.origin_server_ts;
+            const currTs = msg.received_ts || msg.json?.origin_server_ts;
+            if (!prevTs || !currTs) return false;
+            const prevDate = new Date(prevTs);
+            const currDate = new Date(currTs);
+            return prevDate.toDateString() !== currDate.toDateString();
+        },
+
         formatTime(msg) {
             const ts = msg.received_ts || msg.json?.origin_server_ts || (typeof msg.json === 'string' ? JSON.parse(msg.json).origin_server_ts : null);
             if (!ts) {

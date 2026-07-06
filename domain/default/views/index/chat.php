@@ -82,54 +82,56 @@ $fInvite = new Form();
             </div>
 
             <div class="messages" ref="messages">
-                <div v-for="msg in messages"
-                     :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
-                    <div class="msg-header">
-                        <div class="msg-author" v-if="msg.json?.content?.sender">
-                            <img v-if="msg.json.content.avatar_url" :src="msg.json.content.avatar_url" class="msg-avatar" alt="" />
-                            <span class="msg-author-name">{{ msg.json.content.sender }}</span>
-                        </div>
-                        <div class="msg-time" v-if="formatTime(msg)">
-                            {{ formatTime(msg) }}
-                        </div>
-                    </div>
-                    <div class="msg-body">
-                        <div v-if="msg.json?.content?.file_url">
-                            <div v-if="msg.json.content.file_type?.startsWith('image/')">
-                                <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
+                <div class="list">
+                <div v-for="(msg, index) in messages" :key="msg.event_id">
+                    <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
+                    <div :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                        <div class="msg-header">
+                            <div class="msg-author" v-if="msg.json?.content?.sender">
+                                <img v-if="msg.json.content.avatar_url" :src="msg.json.content.avatar_url" class="msg-avatar" alt="" />
+                                <span class="msg-author-name">{{ msg.json.content.sender }}</span>
                             </div>
-                            <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
-                                <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
-                                    <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
-                                    <div class="video-play-overlay">
-                                        <span class="video-play-icon">▶</span>
+                            <div class="msg-time" v-if="formatTime(msg)">
+                                {{ formatTime(msg) }}
+                            </div>
+                        </div>
+                        <div class="msg-body">
+                            <div v-if="msg.json?.content?.file_url">
+                                <div v-if="msg.json.content.file_type?.startsWith('image/')">
+                                    <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
+                                </div>
+                                <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
+                                    <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
+                                        <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
+                                        <div class="video-play-overlay">
+                                            <span class="video-play-icon">▶</span>
+                                        </div>
                                     </div>
                                 </div>
+                                <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
+                                    <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
+                                </div>
+                                <div v-else>
+                                    <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
+                                        {{ msg.json.content.file_name || 'Файл' }}
+                                    </a>
+                                </div>
                             </div>
-                            <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
-                                <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
+                            <div v-if="msg.json?.content?.body">
+                                {{ msg.json.content.body }}
                             </div>
-                            <div v-else>
-                                <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
-                                    {{ msg.json.content.file_name || 'Файл' }}
-                                </a>
-                            </div>
-                        </div>
-                        <div v-if="msg.json?.content?.body">
-                            {{ msg.json.content.body }}
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Форма -->
-            <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
-            <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
-                <div class="composer-input-row">
-                    <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
-                    <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', '➤', [
-                        'class' => 'btn btn-primary'
-                    ])->Field()?>
+                </div>
+                <!-- Форма -->
+                <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
+                <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
+                    <div class="composer-input-row">
+                        <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
+                        <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', '➤', [
+                            'class' => 'btn btn-primary'
+                        ])->Field()?>
                 </div>
                 <div class="composer-actions">
                     <div class="file-upload-wrapper">
