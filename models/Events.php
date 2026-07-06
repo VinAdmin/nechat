@@ -252,11 +252,15 @@ class Events extends DB{
             'room_id' => $room['room_id'],
             'sender'  => $sender,
         ]);
-        
+
+        $mUsers = new Users();
+        $user = $mUsers->getUserById($sender);
+
         $content = [
-            'body'    => $body,
-            'room_id' => $room['room_id'],
-            'sender'  => $sender
+            'body'       => $body,
+            'room_id'    => $room['room_id'],
+            'sender'     => $sender,
+            'avatar_url' => $user['avatar_url'] ?? ''
         ];
 
         if ($fileUrl) {

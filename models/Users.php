@@ -55,6 +55,51 @@ class Users extends DB{
         return $this->user_id;
     }
     
+    public function getUserById(string $user_id): array {
+        $this->select()->from()->where("user_id = :user_id");
+        $result = $this->fetch(['user_id' => $user_id]);
+        return $result ?: [];
+    }
+
+    public function changePassword(string $user_id, string $oldPassword, string $newPassword): string {
+        $user = $this->getUserById($user_id);
+        if (!$user) {
+            return json_encode(["error" => "User not found"]);
+        }
+
+        if (!password_verify($oldPassword, $user['password'])) {
+            return json_encode(["error" => "Old password is incorrect"]);
+        }
+
+        $this->Update([
+            'password' => password_hash($newPassword, PASSWORD_BCRYPT),
+            'user_id'  => $user_id
+        ], 'user_id = :user_id');
+
+        return json_encode(["status" => "ok"]);
+    }
+
+    public function updateProfile(string $user_id, array $data): string {
+        $update = [];
+
+        if(isset($data['password']) && !empty($data['password'])){
+            $update['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
+        }
+
+        if(isset($data['avatar_url'])){
+            $update['avatar_url'] = strip_tags($data['avatar_url']);
+        }
+
+        if(empty($update)){
+            return json_encode(["status" => "ok", "message" => "Nothing to update"]);
+        }
+
+        $update['user_id'] = $user_id;
+        $this->Update($update, 'user_id = :user_id');
+
+        return json_encode(["status" => "ok"]);
+    }
+
     public function registration(): string {
         $data = json_decode(file_get_contents("php://input"), true);
         

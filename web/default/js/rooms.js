@@ -38,7 +38,13 @@ const app = Vue.createApp({
             publicSearchQuery: '',
             publicSearchSearched: false,
             publicSearchLoading: false,
-            showRooms: false
+            showRooms: false,
+            profileUserId: '',
+            profileAvatar: '',
+            profileOldPassword: '',
+            profilePassword: '',
+            profileToken: '',
+            profileAvatarFile: null
         }
     },
 
@@ -779,6 +785,120 @@ const app = Vue.createApp({
             notify('Вы вошли в комнату', 'success', 3000);
             this.joinedRooms();
             this.publicRooms = this.publicRooms.filter(r => r.room_id !== roomId);
+        },
+
+        /**
+         * Открывает модальное окно профиля и загружает данные.
+         */
+        async openProfile() {
+            const token = localStorage.getItem('token');
+            this.profileToken = token;
+            this.profilePassword = '';
+            this.profileAvatarFile = null;
+
+            const res = await fetch('/api/v1/profile/', {
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await res.json();
+            if (!result.error) {
+                this.profileUserId = result.user_id || localStorage.getItem('user_id');
+                this.profileAvatar = result.avatar_url || '';
+            } else {
+                this.profileUserId = localStorage.getItem('user_id');
+            }
+        },
+
+        /**
+         * Обрабатывает выбор файла аватара профиля.
+         */
+        onProfileAvatarChange(e) {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            this.profileAvatarFile = file;
+            const reader = new FileReader();
+            reader.onload = (ev) => { this.profileAvatar = ev.target.result; };
+            reader.readAsDataURL(file);
+        },
+
+        /**
+         * Копирует токен в буфер обмена.
+         */
+        copyToken() {
+            const field = document.getElementById('tokenField');
+            if (!field) return;
+            field.select();
+            navigator.clipboard?.writeText(field.value);
+            notify('Токен скопирован', 'success', 2000);
+        },
+
+        /**
+         * Сохраняет профиль: аватар и/или пароль.
+         */
+        async saveProfile() {
+            const token = localStorage.getItem('token');
+
+            if (this.profilePassword && !this.profileOldPassword) {
+                notify('Введите старый пароль', 'warning', 3000);
+                return;
+            }
+
+            if (this.profilePassword) {
+                const res = await fetch('/api/v1/profile/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        old_password: this.profileOldPassword,
+                        new_password: this.profilePassword
+                    })
+                });
+
+                const result = await res.json();
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
+
+                notify('Пароль изменён', 'success', 3000);
+                this.profileOldPassword = '';
+                this.profilePassword = '';
+            }
+
+            if (this.profileAvatarFile) {
+                const formData = new FormData();
+                formData.append('avatar', this.profileAvatarFile);
+
+                const res = await fetch('/api/v1/profile/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                });
+
+                const result = await res.json();
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
+
+                notify('Аватар сохранён', 'success', 3000);
+                this.profileAvatarFile = null;
+
+                if (this.profileAvatar && this.profileAvatar.startsWith('/f/')) {
+                    this.profileAvatar = this.profileAvatar + '?t=' + Date.now();
+                }
+            }
+
+            if (!this.profilePassword && !this.profileAvatarFile) {
+                notify('Нет изменений для сохранения', 'info', 3000);
+            }
         },
 
         /**

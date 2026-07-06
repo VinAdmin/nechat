@@ -131,6 +131,81 @@ class V1Controller extends \wco\kernel\Controller{
         return true;
     }
     
+    public function actionProfile() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        header('Content-Type: application/json');
+
+        if($_SERVER['REQUEST_METHOD'] === 'GET'){
+            $mUsers = new Users();
+            $user = $mUsers->getUserById($mAccesToken->sender);
+            echo json_encode([
+                'user_id'   => $user['user_id'] ?? '',
+                'name'      => $user['name'] ?? '',
+                'avatar_url' => $user['avatar_url'] ?? '',
+                'email'     => $user['email'] ?? ''
+            ]);
+            return true;
+        }
+
+        if($_SERVER['REQUEST_METHOD'] === 'POST'){
+            $rawInput = file_get_contents("php://input");
+            $data = json_decode($rawInput, true);
+
+            if(!is_array($data)){
+                $data = $_POST;
+            }
+
+            $avatarUrl = $data['avatar_url'] ?? '';
+
+            if(!empty($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK){
+                $uploadDir = __DIR__ . '/../../../../../web/default/uploads';
+                if(!is_dir($uploadDir)){
+                    http_response_code(500);
+                    echo json_encode(["error" => "Upload directory not found"]);
+                    return true;
+                }
+
+                $ext = strtolower(pathinfo($_FILES['avatar']['name'], PATHINFO_EXTENSION));
+                $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+                if(!in_array($ext, $allowedExts)){
+                    echo json_encode(["error" => "Invalid file type"]);
+                    return true;
+                }
+
+                $uniqueName = time() . '_' . bin2hex(random_bytes(8)) . '_avatar.' . $ext;
+                $destination = $uploadDir . '/' . $uniqueName;
+
+                if(move_uploaded_file($_FILES['avatar']['tmp_name'], $destination)){
+                    $avatarUrl = '/f/' . $uniqueName;
+                }
+            }
+
+            $mUsers = new Users();
+
+            if(!empty($data['new_password'])){
+                echo $mUsers->changePassword(
+                    $mAccesToken->sender,
+                    $data['old_password'] ?? '',
+                    $data['new_password']
+                );
+                return true;
+            }
+
+            echo $mUsers->updateProfile($mAccesToken->sender, [
+                'avatar_url' => $avatarUrl
+            ]);
+            return true;
+        }
+
+        return true;
+    }
+
     public function actionLogout() {
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {

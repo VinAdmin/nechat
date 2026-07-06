@@ -25,10 +25,12 @@ $fInvite = new Form();
                 <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#publicRooms" title="Публичные комнаты">
                     🔍
                 </button>
+                <button class="btn btn-outline-info btn-sm" @click="openProfile" data-bs-toggle="modal" data-bs-target="#profileModal" title="Профиль">
+                    👤
+                </button>
                 <button class="btn btn-outline-danger btn-sm" @click="logout" title="Выйти">
                     ⏻
                 </button>
-                <button class="btn btn-close btn-close-white d-md-none" @click="showRooms = false" title="Закрыть"></button>
             </div>
 
             <div class="rooms">
@@ -84,7 +86,8 @@ $fInvite = new Form();
                      :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
                     <div class="msg-header">
                         <div class="msg-author" v-if="msg.json?.content?.sender">
-                            {{ msg.json.content.sender }}
+                            <img v-if="msg.json.content.avatar_url" :src="msg.json.content.avatar_url" class="msg-avatar" alt="" />
+                            <span class="msg-author-name">{{ msg.json.content.sender }}</span>
                         </div>
                         <div class="msg-time" v-if="formatTime(msg)">
                             {{ formatTime(msg) }}
@@ -223,6 +226,51 @@ $fInvite = new Form();
                         </div>
                         <button class="btn btn-success btn-sm" @click="joinPublicRoom(room.room_id)">Войти</button>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Профиль -->
+    <div class="modal fade" id="profileModal" tabindex="-1" aria-labelledby="profileModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="profileModalLabel">Профиль</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <img v-if="profileAvatar" :src="profileAvatar" class="profile-avatar-preview" alt="" />
+                        <div v-else class="profile-avatar-preview profile-avatar-placeholder">{{ (profileUserId || '?').charAt(1).toUpperCase() }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">ID</label>
+                        <input type="text" class="form-control" :value="profileUserId" readonly />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Аватар</label>
+                        <input type="file" accept="image/*" @change="onProfileAvatarChange" class="form-control" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Старый пароль</label>
+                        <input type="password" v-model="profileOldPassword" class="form-control" placeholder="Введите текущий пароль" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Новый пароль</label>
+                        <input type="password" v-model="profilePassword" class="form-control" placeholder="Оставьте пустым, если не хотите менять" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-white">Токен доступа</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" :value="profileToken" readonly id="tokenField" />
+                            <button class="btn btn-outline-secondary" @click="copyToken" title="Копировать">📋</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+                    <button type="button" class="btn btn-primary" @click="saveProfile">Сохранить</button>
                 </div>
             </div>
         </div>
