@@ -781,6 +781,26 @@ const app = Vue.createApp({
         },
 
         /**
+         * Завершает сессию: удаляет токен на сервере и очищает localStorage.
+         * @returns {Promise<void>}
+         */
+        async logout() {
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/logout/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            localStorage.clear();
+            document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
+            window.location.href = '/';
+        },
+
+        /**
          * Открывает модальное окно настроек комнаты.
          * Заполняет поля текущими значениями.
          */

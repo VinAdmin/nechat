@@ -59,6 +59,13 @@ class AccessToken extends DB{
         return false;
     }
 
+    public function deleteToken(string $token): bool {
+        $token = trim(strip_tags($token));
+        $pdo = DB::connect();
+        $stmt = $pdo->prepare("DELETE FROM {$this->init()} WHERE token = :token");
+        return $stmt->execute(['token' => $token]);
+    }
+
     public function getToken() {
         $headers = getallheaders();
         

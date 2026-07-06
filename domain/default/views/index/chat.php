@@ -21,6 +21,9 @@ $fInvite = new Form();
                 <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#publicRooms" title="Публичные комнаты">
                     🔍
                 </button>
+                <button class="btn btn-outline-danger btn-sm" @click="logout" title="Выйти">
+                    ⏻
+                </button>
             </div>
 
             <div class="rooms">

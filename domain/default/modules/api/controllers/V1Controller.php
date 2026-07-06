@@ -131,6 +131,22 @@ class V1Controller extends \wco\kernel\Controller{
         return true;
     }
     
+    public function actionLogout() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $token = str_replace("Bearer ", "", getallheaders()['Authorization']);
+        $mAccesToken->deleteToken($token);
+
+        header('Content-Type: application/json');
+        echo json_encode(["status" => "ok"]);
+        return true;
+    }
+
     public function actionJoinRoom() {
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
