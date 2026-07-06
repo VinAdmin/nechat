@@ -23,7 +23,9 @@ const app = Vue.createApp({
             roomMembers: [],
             fileName: '',
             previewImage: '',
-            previewImageName: ''
+            previewImageName: '',
+            previewVideo: '',
+            previewVideoName: ''
         }
     },
 
@@ -258,10 +260,16 @@ const app = Vue.createApp({
             const form = e.target;
             const token = localStorage.getItem('token');
             const fileInput = form.querySelector('input[name="file"]');
-            const file = fileInput?.files?.[0];
+            const videoInput = form.querySelector('input[name="video_file"]');
+            const file = fileInput?.files?.[0] || videoInput?.files?.[0];
             const bodyText = form.querySelector('input[name="body"]')?.value || '';
 
-            if (file && file.size > 5 * 1024 * 1024) {
+            if (!file && !bodyText.trim()) {
+                notify('Введите сообщение или выберите файл', 'warning', 4000);
+                return;
+            }
+
+            if (file && file.size > 1 * 1024 * 1024) {
                 await this.uploadFileInChunks({
                     form,
                     token,
@@ -271,8 +279,13 @@ const app = Vue.createApp({
                 });
             } else {
                 const formData = new FormData(form);
+                formData.delete('video_file');
                 formData.set('room_id', this.roomId);
                 formData.set('msgtype', file ? 'm.file' : 'm.text');
+
+                if (file && !formData.has('file')) {
+                    formData.append('file', file, file.name);
+                }
 
                 const res = await fetch('/api/v1/rooms/', {
                     method: 'POST',
@@ -295,7 +308,7 @@ const app = Vue.createApp({
         },
 
         async uploadFileInChunks({form, token, file, bodyText, roomId}) {
-            const chunkSize = 5 * 1024 * 1024; // 5 MB
+            const chunkSize = 1 * 1024 * 1024; // 1 MB
             const chunkCount = Math.ceil(file.size / chunkSize);
             const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
@@ -345,6 +358,91 @@ const app = Vue.createApp({
         },
 
         /**
+         * Обрабатывает выбор видеофайла и отправляет его в чат.
+         * @param {Event} e
+         * @returns {Promise<void>}
+         */
+        async onVideoChange(e) {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const form = document.getElementById('sendMessage');
+            const token = localStorage.getItem('token');
+
+            if (file.size > 1 * 1024 * 1024) {
+                await this.uploadFileInChunks({
+                    form,
+                    token,
+                    file,
+                    bodyText: file.name,
+                    roomId: this.roomId
+                });
+            } else {
+                const formData = new FormData();
+                formData.append('room_id', this.roomId);
+                formData.append('msgtype', 'm.file');
+                formData.append('file', file, file.name);
+
+                const res = await fetch('/api/v1/rooms/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                });
+
+                const result = await res.json();
+
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
+            }
+
+            e.target.value = '';
+        },
+
+        async onAudioChange(e) {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const form = document.getElementById('sendMessage');
+            const token = localStorage.getItem('token');
+
+            if (file.size > 1 * 1024 * 1024) {
+                await this.uploadFileInChunks({
+                    form,
+                    token,
+                    file,
+                    bodyText: file.name,
+                    roomId: this.roomId
+                });
+            } else {
+                const formData = new FormData();
+                formData.append('room_id', this.roomId);
+                formData.append('msgtype', 'm.file');
+                formData.append('file', file, file.name);
+
+                const res = await fetch('/api/v1/rooms/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                });
+
+                const result = await res.json();
+
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
+            }
+
+            e.target.value = '';
+        },
+
+        /**
          * Показывает увеличенное изображение в модальном окне.
          * @param {string} url
          * @param {string} name
@@ -358,6 +456,62 @@ const app = Vue.createApp({
                 const modal = new bootstrap.Modal(modalEl);
                 modal.show();
             }
+        },
+
+        /**
+         * Открывает видео в модальном окне для полноэкранного просмотра.
+         * @param {string} url
+         * @param {string} name
+         */
+        async viewVideo(url, name) {
+            this.previewVideo = url;
+            this.previewVideoName = name || 'Видео';
+
+            const modalEl = document.getElementById('videoPreviewModal');
+            if (!modalEl) return;
+
+            await this.$nextTick();
+            const modal = new bootstrap.Modal(modalEl);
+            modal.show();
+        },
+
+        /**
+         * Обрабатывает ошибку воспроизведения видео — показывает ссылку на скачивание.
+         * @param {Event} event
+         * @param {string} url
+         * @param {string} name
+         */
+        onVideoError(event, url, name) {
+            const video = event.target;
+            if (!video?.parentNode) return;
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = '_blank';
+            link.rel = 'noreferrer';
+            link.textContent = name || 'Скачать видео';
+            link.className = 'btn btn-sm btn-outline-light mt-1';
+            video.parentNode.insertBefore(link, video.nextSibling);
+            video.remove();
+        },
+
+        /**
+         * Определяет, является ли файл видео по MIME-типу или расширению.
+         * @param {string} fileType
+         * @param {string} fileName
+         * @returns {boolean}
+         */
+        isVideo(fileType, fileName) {
+            if (fileType?.startsWith('video/')) return true;
+            if (!fileName) return false;
+            const ext = fileName.split('.').pop()?.toLowerCase();
+            return ['mp4', 'webm', 'ogg'].includes(ext);
+        },
+
+        isAudio(fileType, fileName) {
+            if (fileType?.startsWith('audio/')) return true;
+            if (!fileName) return false;
+            const ext = fileName.split('.').pop()?.toLowerCase();
+            return ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'].includes(ext);
         },
 
         /**
@@ -553,6 +707,7 @@ const app = Vue.createApp({
             window.location.href = '/';
         }
 
+        document.cookie = 'token=' + encodeURIComponent(token) + '; path=/; max-age=86400; SameSite=Lax';
         this.joinedRooms();
         this.parseHash();
 
@@ -578,6 +733,17 @@ const app = Vue.createApp({
         
         document.getElementById('formInvite')
             .addEventListener('submit', this.invite);
+
+        const modalEl = document.getElementById('videoPreviewModal');
+        if (modalEl) {
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                const video = modalEl.querySelector('video');
+                if (video) {
+                    video.pause();
+                    video.currentTime = 0;
+                }
+            });
+        }
     }
 });
 

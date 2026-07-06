@@ -67,6 +67,17 @@ $fInvite = new Form();
                             <div v-if="msg.json.content.file_type?.startsWith('image/')">
                                 <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
                             </div>
+                            <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
+                                <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
+                                    <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
+                                    <div class="video-play-overlay">
+                                        <span class="video-play-icon">▶</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
+                                <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
+                            </div>
                             <div v-else>
                                 <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
                                     {{ msg.json.content.file_name || 'Файл' }}
@@ -87,11 +98,23 @@ $fInvite = new Form();
                     <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
                 </div>
                 <div class="mb-2 file-upload-wrapper">
-                    <input type="file" name="file" id="file" class="file-input" @change="onFileChange" />
+                    <input type="file" name="file" id="file" class="file-input" @change="onFileChange" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
                     <label for="file" class="btn btn-outline-secondary file-upload-button">
                         <span>Прикрепить файл</span>
                     </label>
                     <span class="file-upload-name" v-if="fileName">{{ fileName }}</span>
+                </div>
+                <div class="mb-2">
+                    <input type="file" name="video_file" id="video" class="file-input" accept="video/*" @change="onVideoChange" />
+                    <label for="video" class="btn btn-outline-secondary file-upload-button">
+                        <span>Видео</span>
+                    </label>
+                </div>
+                <div class="mb-2">
+                    <input type="file" name="audio_file" id="audio" class="file-input" accept="audio/*" @change="onAudioChange" />
+                    <label for="audio" class="btn btn-outline-secondary file-upload-button">
+                        <span>Аудио</span>
+                    </label>
                 </div>
                 <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', 'Отправить', [
                     'class' => 'btn btn-primary'
@@ -196,6 +219,20 @@ $fInvite = new Form();
                 </div>
                 <div class="modal-body d-flex justify-content-center align-items-center p-0">
                     <img :src="previewImage" :alt="previewImageName || 'Изображение'" class="image-preview" />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="videoPreviewModal" tabindex="-1" aria-labelledby="videoPreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="videoPreviewModalLabel">{{ previewVideoName }}</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body d-flex justify-content-center align-items-center p-0">
+                    <video :src="previewVideo" class="video-preview" controls autoplay></video>
                 </div>
             </div>
         </div>

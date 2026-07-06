@@ -44,6 +44,21 @@ class AccessToken extends DB{
         return $jwt;
     }
     
+    public function checkToken(string $token): bool {
+        $token = trim(strip_tags($token));
+        $mUsers = new Users();
+
+        $this->select()->from()->joinInner(['u' => $mUsers->init()], "u.user_id = t1.user_id")->where('token = :token');
+        $result = $this->fetch(['token' => $token]);
+
+        if (isset($result['token'])) {
+            $this->sender = $result['user_id'];
+            return true;
+        }
+
+        return false;
+    }
+
     public function getToken() {
         $headers = getallheaders();
         

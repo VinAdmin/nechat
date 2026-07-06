@@ -83,6 +83,7 @@ $aut = new Form();
         }
 
         localStorage.setItem('token', result.token);
+        document.cookie = 'token=' + encodeURIComponent(result.token) + '; path=/; max-age=86400; SameSite=Lax';
         if (result.user_id) {
             localStorage.setItem('user_id', result.user_id);
         }

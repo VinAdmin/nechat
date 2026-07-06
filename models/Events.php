@@ -77,6 +77,20 @@ class Events extends DB{
             mkdir($uploadDir, 0755, true);
         }
 
+        $videoExts = ['mp4', 'webm', 'ogg', 'mkv', 'avi', 'mov', 'flv', 'wmv', '3gp'];
+        $videoMimes = [
+            'mp4' => 'video/mp4', 'webm' => 'video/webm', 'ogg' => 'video/ogg',
+            'mkv' => 'video/x-matroska', 'avi' => 'video/x-msvideo',
+            'mov' => 'video/quicktime', 'flv' => 'video/x-flv',
+            'wmv' => 'video/x-ms-wmv', '3gp' => 'video/3gpp'
+        ];
+        $audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+        $audioMimes = [
+            'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'ogg' => 'audio/ogg',
+            'flac' => 'audio/flac', 'aac' => 'audio/aac', 'm4a' => 'audio/mp4',
+            'wma' => 'audio/x-ms-wma', 'opus' => 'audio/opus'
+        ];
+
         $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;
         $chunkIndex = isset($data['chunk_index']) ? (int)$data['chunk_index'] : 0;
         $uploadId = isset($data['upload_id']) ? strip_tags($data['upload_id']) : null;
@@ -142,8 +156,16 @@ class Events extends DB{
 
                 fclose($out);
                 @rmdir($chunkDir);
-                $fileUrl = '/default/uploads/' . $uniqueName;
+                $fileUrl = '/f/' . $uniqueName;
                 $fileType = $fileInfo['type'];
+                $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                if ($fileType === 'application/octet-stream') {
+                    if (isset($videoMimes[$fileExt])) {
+                        $fileType = $videoMimes[$fileExt];
+                    } elseif (isset($audioMimes[$fileExt])) {
+                        $fileType = $audioMimes[$fileExt];
+                    }
+                }
                 if ($fileSize === null) {
                     $fileSize = filesize($destination);
                 }
@@ -165,8 +187,16 @@ class Events extends DB{
                     return json_encode(["error" => "Upload failed"]);
                 }
 
-                $fileUrl = '/default/uploads/' . $uniqueName;
+                $fileUrl = '/f/' . $uniqueName;
                 $fileType = $fileInfo['type'];
+                $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
+                if ($fileType === 'application/octet-stream') {
+                    if (isset($videoMimes[$fileExt])) {
+                        $fileType = $videoMimes[$fileExt];
+                    } elseif (isset($audioMimes[$fileExt])) {
+                        $fileType = $audioMimes[$fileExt];
+                    }
+                }
                 if ($fileSize === null) {
                     $fileSize = (int)$fileInfo['size'];
                 }
