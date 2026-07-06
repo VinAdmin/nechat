@@ -14,10 +14,13 @@ const app = Vue.createApp({
     data() {
         return {
             rooms: [],
-            messagesStore: {}, // кеш сообщений по room_id
+            messagesStore: {},
             messages: [],
             roomId: null,
             roomName: '',
+            roomTopic: '',
+            roomAvatar: '',
+            roomJoinRule: 'public',
             roomMembership: null,
             syncToken: "",
             roomMembers: [],
@@ -25,7 +28,16 @@ const app = Vue.createApp({
             previewImage: '',
             previewImageName: '',
             previewVideo: '',
-            previewVideoName: ''
+            previewVideoName: '',
+            settingsName: '',
+            settingsTopic: '',
+            settingsAvatar: '',
+            settingsJoinRule: 'public',
+            settingsAvatarFile: null,
+            publicRooms: [],
+            publicSearchQuery: '',
+            publicSearchSearched: false,
+            publicSearchLoading: false
         }
     },
 
@@ -77,6 +89,9 @@ const app = Vue.createApp({
         openRoom(room) {
             this.roomId = room.room_id;
             this.roomName = room.name;
+            this.roomTopic = room.topic || '';
+            this.roomAvatar = room.avatar_url || '';
+            this.roomJoinRule = room.join_rule || 'public';
             this.roomMembership = room.membership || null;
 
             localStorage.setItem('room_id', room.room_id);
@@ -97,8 +112,11 @@ const app = Vue.createApp({
             
             const form = e.target;
             const token = localStorage.getItem('token');
-            
-            const data = Object.fromEntries(new FormData(form).entries());
+
+            const formData = new FormData(form);
+            const data = Object.fromEntries(formData.entries());
+            if (!data.topic) data.topic = '';
+            if (!data.join_rule) data.join_rule = 'public';
 
             const res = await fetch('/api/v1/createRoom/', {
                 method: 'POST',
@@ -243,7 +261,13 @@ const app = Vue.createApp({
                 this.roomId = id;
                 this.roomName = name || localStorage.getItem('room_name');
                 const currentRoom = this.rooms.find(room => room.room_id === id);
-                this.roomMembership = currentRoom ? currentRoom.membership : this.roomMembership;
+                if (currentRoom) {
+                    this.roomName = currentRoom.name;
+                    this.roomTopic = currentRoom.topic || '';
+                    this.roomAvatar = currentRoom.avatar_url || '';
+                    this.roomJoinRule = currentRoom.join_rule || 'public';
+                    this.roomMembership = currentRoom.membership || null;
+                }
 
                 this.updateMessages();
             }
@@ -697,7 +721,163 @@ const app = Vue.createApp({
 
             notify('Бан снят', 'success', 4000);
             this.openMembers(this.roomId);
-        }
+        },
+
+        /**
+         * Ищет публичные комнаты по запросу.
+         * @returns {Promise<void>}
+         */
+        async searchPublicRooms() {
+            const token = localStorage.getItem('token');
+            this.publicSearchSearched = true;
+            this.publicSearchLoading = true;
+
+            const res = await fetch('/api/v1/publicRooms/?q=' + encodeURIComponent(this.publicSearchQuery), {
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                this.publicSearchLoading = false;
+                return;
+            }
+
+            this.publicRooms = result;
+            this.publicSearchLoading = false;
+        },
+
+        /**
+         * Присоединяется к публичной комнате.
+         * @param {string} roomId
+         * @returns {Promise<void>}
+         */
+        async joinPublicRoom(roomId) {
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/joinRoom/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ room_id: roomId })
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            notify('Вы вошли в комнату', 'success', 3000);
+            this.joinedRooms();
+            this.publicRooms = this.publicRooms.filter(r => r.room_id !== roomId);
+        },
+
+        /**
+         * Открывает модальное окно настроек комнаты.
+         * Заполняет поля текущими значениями.
+         */
+        openRoomSettings() {
+            this.settingsName = this.roomName;
+            this.settingsTopic = this.roomTopic;
+            this.settingsAvatar = this.roomAvatar;
+            this.settingsJoinRule = this.roomJoinRule;
+            this.settingsAvatarFile = null;
+        },
+
+        /**
+         * Обрабатывает выбор файла аватара.
+         * @param {Event} e
+         */
+        onAvatarChange(e) {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            this.settingsAvatarFile = file;
+
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                this.settingsAvatar = ev.target.result;
+            };
+            reader.readAsDataURL(file);
+        },
+
+        /**
+         * Сохраняет настройки комнаты через API.
+         * @returns {Promise<void>}
+         */
+        async saveRoomSettings() {
+            if (!this.roomId) return;
+
+            const token = localStorage.getItem('token');
+
+            let avatarUrl = this.roomAvatar;
+
+            if (this.settingsAvatarFile) {
+                const formData = new FormData();
+                formData.append('file', this.settingsAvatarFile);
+                formData.append('room_id', this.roomId);
+
+                const uploadRes = await fetch('/api/v1/rooms/' + this.roomId + '/upload_avatar', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token
+                    },
+                    body: formData
+                });
+
+                const uploadResult = await uploadRes.json();
+                if (uploadResult.error) {
+                    notify(uploadResult.error, 'warning', 5000);
+                    return;
+                }
+
+                avatarUrl = uploadResult.file_url;
+            }
+
+            const body = {
+                room_id: this.roomId,
+                name: this.settingsName,
+                topic: this.settingsTopic,
+                join_rule: this.settingsJoinRule,
+                avatar_url: avatarUrl
+            };
+
+            const res = await fetch('/api/v1/rooms/' + this.roomId + '/update', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(body)
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            notify('Настройки сохранены', 'success', 3000);
+
+            this.roomName = this.settingsName;
+            this.roomTopic = this.settingsTopic;
+            this.roomAvatar = avatarUrl;
+            this.roomJoinRule = this.settingsJoinRule;
+
+            const modalEl = document.getElementById('roomSettings');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+
+            this.joinedRooms();
+        },
     },
 
     mounted() {
@@ -742,6 +922,16 @@ const app = Vue.createApp({
                     video.pause();
                     video.currentTime = 0;
                 }
+            });
+        }
+
+        const publicRoomsModal = document.getElementById('publicRooms');
+        if (publicRoomsModal) {
+            publicRoomsModal.addEventListener('shown.bs.modal', () => {
+                this.publicSearchQuery = '';
+                this.publicRooms = [];
+                this.publicSearchSearched = false;
+                this.searchPublicRooms();
             });
         }
     }

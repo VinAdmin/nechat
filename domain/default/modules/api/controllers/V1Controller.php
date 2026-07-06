@@ -113,6 +113,47 @@ class V1Controller extends \wco\kernel\Controller{
         return true;
     }
     
+    public function actionPublicRooms() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+        
+        $query = isset($_GET['q']) ? strip_tags($_GET['q']) : '';
+        
+        $mRooms = new Rooms();
+        
+        header('Content-Type: application/json');
+        echo $mRooms->searchPublicRooms($query, $mAccesToken->sender);
+        
+        return true;
+    }
+    
+    public function actionJoinRoom() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+        
+        $roomId = isset($this->data['room_id']) ? strip_tags($this->data['room_id']) : '';
+        if(!$roomId){
+            http_response_code(400);
+            echo json_encode(["error" => "Room ID is required"]);
+            return true;
+        }
+        
+        $mRooms = new Rooms();
+        
+        header('Content-Type: application/json');
+        echo $mRooms->joinPublicRoom($roomId, $mAccesToken->sender);
+        
+        return true;
+    }
+    
     private function decodeUriRoom(): array {
         $uri = filter_input(INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL);
         
@@ -175,7 +216,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban', 'unban'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'update', 'upload_avatar'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -350,5 +391,72 @@ class V1Controller extends \wco\kernel\Controller{
         }
 
         return json_encode(['status' => 'ok']);
+    }
+
+    /**
+     * Обновляет настройки комнаты (название, тема, аватар, правила входа).
+     *
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function update(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        $mRooms = new Rooms();
+        return $mRooms->updateRoom($params['sender']);
+    }
+
+    /**
+     * Загружает аватар комнаты.
+     *
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function upload_avatar(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
+            return json_encode(['error' => 'Only the room creator can change the avatar']);
+        }
+
+        if(empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK){
+            return json_encode(['error' => 'File upload error']);
+        }
+
+        $uploadDir = __DIR__ . '/../../../../../web/default/uploads';
+        if(!is_dir($uploadDir)){
+            return json_encode(['error' => 'Upload directory not found']);
+        }
+
+        $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+        $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        if(!in_array($ext, $allowedExts)){
+            return json_encode(['error' => 'Invalid file type. Allowed: jpg, png, gif, webp']);
+        }
+
+        $uniqueName = time() . '_' . bin2hex(random_bytes(8)) . '_avatar.' . $ext;
+        $destination = $uploadDir . '/' . $uniqueName;
+
+        if(!move_uploaded_file($_FILES['file']['tmp_name'], $destination)){
+            return json_encode(['error' => 'Unable to save file']);
+        }
+
+        $fileUrl = '/f/' . $uniqueName;
+
+        return json_encode(['status' => 'ok', 'file_url' => $fileUrl]);
     }
 }
