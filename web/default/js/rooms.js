@@ -50,7 +50,9 @@ const app = Vue.createApp({
             voiceChunks: [],
             voiceBlob: null,
             voiceTimer: null,
-            voiceSeconds: 0
+            voiceSeconds: 0,
+            unreadCounts: {},
+            prevRoomCounts: {}
         }
     },
 
@@ -111,6 +113,8 @@ const app = Vue.createApp({
             localStorage.setItem('room_name', room.name);
 
             window.location.hash = `#room_${room.room_id}`;
+
+            this.unreadCounts[room.room_id] = 0;
 
             this.updateMessages();
         },
@@ -191,7 +195,7 @@ const app = Vue.createApp({
             }
             
             this.messages = this.messagesStore[this.roomId].filter(m =>
-                m.json?.content?.body
+                m.json?.content?.body || m.json?.content?.file_url
             );
     
             this.$nextTick(() => {
@@ -228,14 +232,28 @@ const app = Vue.createApp({
             
             for(const roomId in rooms){
                 const events = rooms[roomId].events || {};
-                
+
                 if (!this.messagesStore[roomId]) {
                     this.messagesStore[roomId] = [];
                 }
-                
+
+                let newEvents = 0;
                 for(const event of events){
                     if (!event?.event_id) continue;
-                    this.messagesStore[roomId].push(event);
+                    if (event.type === 'm.room.member') continue;
+                    const exists = this.messagesStore[roomId].some(e => e.event_id === event.event_id);
+                    if (!exists) {
+                        this.messagesStore[roomId].push(event);
+                        newEvents++;
+                    }
+                }
+
+                if (newEvents > 0 && roomId !== this.roomId) {
+                    this.unreadCounts[roomId] = (this.unreadCounts[roomId] || 0) + newEvents;
+                    const room = this.rooms.find(r => r.room_id === roomId);
+                    const sender = events[0]?.json?.content?.sender || '';
+                    const body = events[0]?.json?.content?.body || '';
+                    this.notify(room?.name || roomId, sender, body);
                 }
             }
 
@@ -258,6 +276,17 @@ const app = Vue.createApp({
             sessionStorage.setItem("sync", this.syncToken);
 
             this.updateMessages();
+        },
+
+        notify(roomName, sender, body) {
+            if (document.hidden && window.Notification && Notification.permission === 'granted') {
+                new Notification(roomName, {
+                    body: sender + ': ' + body,
+                    icon: '/default/favicon.ico'
+                });
+            } else if (window.Notification && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
         },
 
         /**
@@ -1131,6 +1160,10 @@ const app = Vue.createApp({
 
         if (!token) {
             window.location.href = '/';
+        }
+
+        if (window.Notification && Notification.permission === 'default') {
+            Notification.requestPermission();
         }
 
         document.cookie = 'token=' + encodeURIComponent(token) + '; path=/; max-age=86400; SameSite=Lax';

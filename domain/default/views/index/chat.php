@@ -44,6 +44,7 @@ $fInvite = new Form();
                         <img v-if="room.avatar_url" :src="room.avatar_url" class="room-avatar-sm" alt="" />
                         <span v-else class="room-avatar-sm room-avatar-placeholder">{{ room.name.charAt(0) }}</span>
                         {{ room.name }}
+                        <span v-if="unreadCounts[room.room_id]" class="unread-badge">{{ unreadCounts[room.room_id] }}</span>
                     </a>
 
                 </div>
@@ -181,7 +182,8 @@ $fInvite = new Form();
         </div>
 
     </div>
-    
+    </div>
+
     <!-- Создание комнаты -->
     <div class="modal fade" id="createRoom" tabindex="-1" aria-labelledby="createRoomLabel" aria-hidden="true">
         <div class="modal-dialog">

@@ -492,6 +492,18 @@ form *{
 .room-link {
     display: flex;
     align-items: center;
+    gap: 6px;
+}
+
+.unread-badge{
+    background: #dc3545;
+    color: #fff;
+    border-radius: 10px;
+    padding: 0 6px;
+    font-size: 0.7em;
+    font-weight: 700;
+    line-height: 1.5;
+    margin-left: auto;
 }
 
 .profile-avatar-preview {
