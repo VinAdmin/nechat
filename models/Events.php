@@ -84,11 +84,11 @@ class Events extends DB{
             'mov' => 'video/quicktime', 'flv' => 'video/x-flv',
             'wmv' => 'video/x-ms-wmv', '3gp' => 'video/3gpp'
         ];
-        $audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'];
+        $audioExts = ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus', 'webm'];
         $audioMimes = [
             'mp3' => 'audio/mpeg', 'wav' => 'audio/wav', 'ogg' => 'audio/ogg',
             'flac' => 'audio/flac', 'aac' => 'audio/aac', 'm4a' => 'audio/mp4',
-            'wma' => 'audio/x-ms-wma', 'opus' => 'audio/opus'
+            'wma' => 'audio/x-ms-wma', 'opus' => 'audio/opus', 'webm' => 'audio/webm'
         ];
 
         $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;

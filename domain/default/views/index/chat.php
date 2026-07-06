@@ -109,6 +109,7 @@ $fInvite = new Form();
                                     </div>
                                 </div>
                                 <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
+                                    <span class="voice-label" v-if="msg.json.content.file_name?.startsWith('voice_')">🎤</span>
                                     <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
                                 </div>
                                 <div v-else>
@@ -152,6 +153,27 @@ $fInvite = new Form();
                         <label for="audio" class="btn btn-outline-secondary file-upload-button" title="Аудио">
                             <span>🎵</span>
                         </label>
+                    </div>
+                    <div>
+                        <template v-if="!voiceRecording && !voiceBlob">
+                            <button type="button" class="btn btn-outline-secondary file-upload-button" @click="startVoice" title="Голосовое сообщение">
+                                <span>🎤</span>
+                            </button>
+                        </template>
+                        <template v-else-if="voiceRecording">
+                            <button type="button" class="btn btn-danger file-upload-button" @click="stopVoice" title="Остановить запись">
+                                <span>⏹</span>
+                            </button>
+                            <span class="voice-timer ms-1">{{ formatVoiceTime(voiceSeconds) }}</span>
+                        </template>
+                        <template v-else-if="voiceBlob && !voiceRecording">
+                            <button type="button" class="btn btn-success file-upload-button" @click="sendVoice" title="Отправить">
+                                <span>➤</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary file-upload-button" @click="cancelVoice" title="Отмена">
+                                <span>✕</span>
+                            </button>
+                        </template>
                     </div>
                 </div>
             </div>

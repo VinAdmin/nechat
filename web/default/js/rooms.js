@@ -44,7 +44,13 @@ const app = Vue.createApp({
             profileOldPassword: '',
             profilePassword: '',
             profileToken: '',
-            profileAvatarFile: null
+            profileAvatarFile: null,
+            voiceRecording: false,
+            voiceMediaRecorder: null,
+            voiceChunks: [],
+            voiceBlob: null,
+            voiceTimer: null,
+            voiceSeconds: 0
         }
     },
 
@@ -473,6 +479,87 @@ const app = Vue.createApp({
             e.target.value = '';
         },
 
+        async startVoice() {
+            if (this.voiceRecording) return;
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    : 'audio/webm';
+                this.voiceMediaRecorder = new MediaRecorder(stream, { mimeType });
+                this.voiceChunks = [];
+                this.voiceBlob = null;
+                this.voiceSeconds = 0;
+
+                this.voiceMediaRecorder.ondataavailable = (e) => {
+                    if (e.data.size > 0) this.voiceChunks.push(e.data);
+                };
+
+                this.voiceMediaRecorder.onstop = () => {
+                    stream.getTracks().forEach(t => t.stop());
+                    this.voiceBlob = new Blob(this.voiceChunks, { type: mimeType });
+                    clearInterval(this.voiceTimer);
+                    this.voiceTimer = null;
+                };
+
+                this.voiceMediaRecorder.start();
+                this.voiceRecording = true;
+                this.voiceTimer = setInterval(() => { this.voiceSeconds++; }, 1000);
+            } catch (err) {
+                notify('Микрофон недоступен', 'warning', 3000);
+            }
+        },
+
+        stopVoice() {
+            if (!this.voiceRecording || !this.voiceMediaRecorder) return;
+            this.voiceMediaRecorder.stop();
+            this.voiceRecording = false;
+        },
+
+        cancelVoice() {
+            if (this.voiceMediaRecorder && this.voiceMediaRecorder.state !== 'inactive') {
+                this.voiceMediaRecorder.onstop = null;
+                this.voiceMediaRecorder.stop();
+                this.voiceMediaRecorder.stream?.getTracks().forEach(t => t.stop());
+            }
+            clearInterval(this.voiceTimer);
+            this.voiceTimer = null;
+            this.voiceRecording = false;
+            this.voiceBlob = null;
+            this.voiceChunks = [];
+            this.voiceSeconds = 0;
+        },
+
+        async sendVoice() {
+            if (!this.voiceBlob) return;
+            const token = localStorage.getItem('token');
+            const formData = new FormData();
+            formData.append('room_id', this.roomId);
+            formData.append('msgtype', 'm.file');
+            formData.append('file', this.voiceBlob, 'voice_' + Date.now() + '.webm');
+
+            const res = await fetch('/api/v1/rooms/', {
+                method: 'POST',
+                headers: { "Authorization": "Bearer " + token },
+                body: formData
+            });
+
+            const result = await res.json();
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+            }
+
+            this.voiceBlob = null;
+            this.voiceChunks = [];
+            this.voiceSeconds = 0;
+        },
+
+        formatVoiceTime(s) {
+            const m = Math.floor(s / 60);
+            const sec = s % 60;
+            return m + ':' + (sec < 10 ? '0' : '') + sec;
+        },
+
         /**
          * Показывает увеличенное изображение в модальном окне.
          * @param {string} url
@@ -542,7 +629,7 @@ const app = Vue.createApp({
             if (fileType?.startsWith('audio/')) return true;
             if (!fileName) return false;
             const ext = fileName.split('.').pop()?.toLowerCase();
-            return ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus'].includes(ext);
+            return ['mp3', 'wav', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'opus', 'webm'].includes(ext);
         },
 
         /**
