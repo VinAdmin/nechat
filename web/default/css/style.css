@@ -234,6 +234,80 @@ form *{
     white-space: pre-wrap;
 }
 
+.msg-header-right{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-reply{
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.4);
+    cursor: pointer;
+    font-size: 0.85em;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.btn-reply:hover{
+    color: rgba(255,255,255,0.9);
+}
+
+.reply-context{
+    padding: 4px 8px;
+    margin-bottom: 6px;
+    border-left: 3px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.06);
+    border-radius: 4px;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.reply-context:hover{
+    background: rgba(255,255,255,0.12);
+}
+
+.reply-context-sender{
+    color: rgba(255,255,255,0.6);
+    font-weight: 600;
+    font-size: 0.8em;
+    margin-bottom: 2px;
+}
+
+.reply-context-body{
+    color: rgba(255,255,255,0.5);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.msg-highlight{
+    background: rgba(255, 235, 59, 0.15) !important;
+    transition: background 0.5s;
+}
+
+.reply-indicator{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    font-size: 0.85em;
+}
+
+.reply-indicator-text{
+    flex: 1;
+    color: rgba(255,255,255,0.7);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .chat-image {
     max-width: 320px;
     max-height: 300px;

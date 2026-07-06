@@ -52,7 +52,8 @@ const app = Vue.createApp({
             voiceTimer: null,
             voiceSeconds: 0,
             unreadCounts: {},
-            prevRoomCounts: {}
+            prevRoomCounts: {},
+            replyTo: null
         }
     },
 
@@ -181,6 +182,30 @@ const app = Vue.createApp({
                 top: el.scrollHeight,
                 behavior: smooth ? 'smooth' : 'auto'
             });
+        },
+
+        scrollToMessage(eventId) {
+            if (!eventId) return;
+            const all = document.querySelectorAll('[data-event-id]');
+            let target = null;
+            for (const el of all) {
+                if (el.getAttribute('data-event-id') === eventId) {
+                    target = el;
+                    break;
+                }
+            }
+            if (!target) {
+                const exists = this.messagesStore[this.roomId]?.some(e => e.event_id === eventId);
+                notify(exists ? 'Сообщение за пределами видимости' : 'Сообщение не найдено', 'info', 2000);
+                return;
+            }
+            try {
+                target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (e) {
+                target.scrollIntoView(true);
+            }
+            target.classList.add('msg-highlight');
+            setTimeout(() => target.classList.remove('msg-highlight'), 2000);
         },
 
         /**
@@ -336,44 +361,44 @@ const app = Vue.createApp({
             }
 
             if (file && file.size > 1 * 1024 * 1024) {
-                await this.uploadFileInChunks({
-                    form,
-                    token,
-                    file,
-                    bodyText,
-                    roomId: this.roomId
-                });
-            } else {
-                const formData = new FormData(form);
-                formData.delete('video_file');
-                formData.set('room_id', this.roomId);
-                formData.set('msgtype', file ? 'm.file' : 'm.text');
+                const opts = { form, token, file, bodyText, roomId: this.roomId };
+                if (this.replyTo) opts.replyTo = this.replyTo.event_id;
+                await this.uploadFileInChunks(opts);
+                this.replyTo = null;
+                form.reset();
+                this.fileName = '';
+                return;
+            }
 
-                if (file && !formData.has('file')) {
-                    formData.append('file', file, file.name);
-                }
+            const formData = new FormData(form);
+            formData.delete('video_file');
+            formData.set('room_id', this.roomId);
+            formData.set('msgtype', file ? 'm.file' : 'm.text');
+            if (this.replyTo) formData.set('reply_to', this.replyTo.event_id);
 
-                const res = await fetch('/api/v1/rooms/', {
-                    method: 'POST',
-                    headers: {
-                        "Authorization": "Bearer " + token
-                    },
-                    body: formData
-                });
+            if (file && !formData.has('file')) {
+                formData.append('file', file, file.name);
+            }
 
-                const result = await res.json();
+            const res = await fetch('/api/v1/rooms/', {
+                method: 'POST',
+                headers: { "Authorization": "Bearer " + token },
+                body: formData
+            });
 
-                if (result.error) {
-                    notify(result.error, 'warning', 5000);
-                    return;
-                }
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
             }
 
             form.reset();
             this.fileName = '';
+            this.replyTo = null;
         },
 
-        async uploadFileInChunks({form, token, file, bodyText, roomId}) {
+        async uploadFileInChunks({form, token, file, bodyText, roomId, replyTo}) {
             const chunkSize = 1 * 1024 * 1024; // 1 MB
             const chunkCount = Math.ceil(file.size / chunkSize);
             const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -388,6 +413,9 @@ const app = Vue.createApp({
                 formData.append('chunk_count', chunkCount);
                 formData.append('file_name', file.name);
                 formData.append('file_size', file.size);
+                if (replyTo) {
+                    formData.append('reply_to', replyTo);
+                }
                 if (index === chunkCount && bodyText) {
                     formData.append('body', bodyText);
                 }
@@ -436,18 +464,15 @@ const app = Vue.createApp({
             const token = localStorage.getItem('token');
 
             if (file.size > 1 * 1024 * 1024) {
-                await this.uploadFileInChunks({
-                    form,
-                    token,
-                    file,
-                    bodyText: file.name,
-                    roomId: this.roomId
-                });
+                const opts = { form, token, file, bodyText: file.name, roomId: this.roomId };
+                if (this.replyTo) opts.replyTo = this.replyTo.event_id;
+                await this.uploadFileInChunks(opts);
             } else {
                 const formData = new FormData();
                 formData.append('room_id', this.roomId);
                 formData.append('msgtype', 'm.file');
                 formData.append('file', file, file.name);
+                if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
 
                 const res = await fetch('/api/v1/rooms/', {
                     method: 'POST',
@@ -465,6 +490,7 @@ const app = Vue.createApp({
                 }
             }
 
+            this.replyTo = null;
             e.target.value = '';
         },
 
@@ -476,18 +502,15 @@ const app = Vue.createApp({
             const token = localStorage.getItem('token');
 
             if (file.size > 1 * 1024 * 1024) {
-                await this.uploadFileInChunks({
-                    form,
-                    token,
-                    file,
-                    bodyText: file.name,
-                    roomId: this.roomId
-                });
+                const opts = { form, token, file, bodyText: file.name, roomId: this.roomId };
+                if (this.replyTo) opts.replyTo = this.replyTo.event_id;
+                await this.uploadFileInChunks(opts);
             } else {
                 const formData = new FormData();
                 formData.append('room_id', this.roomId);
                 formData.append('msgtype', 'm.file');
                 formData.append('file', file, file.name);
+                if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
 
                 const res = await fetch('/api/v1/rooms/', {
                     method: 'POST',
@@ -505,6 +528,7 @@ const app = Vue.createApp({
                 }
             }
 
+            this.replyTo = null;
             e.target.value = '';
         },
 
@@ -566,6 +590,7 @@ const app = Vue.createApp({
             formData.append('room_id', this.roomId);
             formData.append('msgtype', 'm.file');
             formData.append('file', this.voiceBlob, 'voice_' + Date.now() + '.webm');
+            if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
 
             const res = await fetch('/api/v1/rooms/', {
                 method: 'POST',
@@ -581,12 +606,25 @@ const app = Vue.createApp({
             this.voiceBlob = null;
             this.voiceChunks = [];
             this.voiceSeconds = 0;
+            this.replyTo = null;
         },
 
         formatVoiceTime(s) {
             const m = Math.floor(s / 60);
             const sec = s % 60;
             return m + ':' + (sec < 10 ? '0' : '') + sec;
+        },
+
+        setReply(msg) {
+            this.replyTo = {
+                event_id: msg.event_id,
+                sender: msg.json?.content?.sender || '',
+                body: msg.json?.content?.body || msg.json?.content?.file_name || ''
+            };
+        },
+
+        cancelReply() {
+            this.replyTo = null;
         },
 
         /**

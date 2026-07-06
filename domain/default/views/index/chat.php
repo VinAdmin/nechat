@@ -86,17 +86,24 @@ $fInvite = new Form();
                 <div class="list">
                 <div v-for="(msg, index) in messages" :key="msg.event_id">
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
-                    <div :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                    <div :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
                         <div class="msg-header">
                             <div class="msg-author" v-if="msg.json?.content?.sender">
                                 <img v-if="msg.json.content.avatar_url" :src="msg.json.content.avatar_url" class="msg-avatar" alt="" />
                                 <span class="msg-author-name">{{ msg.json.content.sender }}</span>
                             </div>
-                            <div class="msg-time" v-if="formatTime(msg)">
-                                {{ formatTime(msg) }}
+                            <div class="msg-header-right">
+                                <div class="msg-time" v-if="formatTime(msg)">
+                                    {{ formatTime(msg) }}
+                                </div>
+                                <button class="btn-reply" @click="setReply(msg)" title="Ответить">↩</button>
                             </div>
                         </div>
                         <div class="msg-body">
+                            <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
+                                <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
+                                <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
+                            </div>
                             <div v-if="msg.json?.content?.file_url">
                                 <div v-if="msg.json.content.file_type?.startsWith('image/')">
                                     <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
@@ -129,6 +136,10 @@ $fInvite = new Form();
                 <!-- Форма -->
                 <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
                 <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
+                    <div v-if="replyTo" class="reply-indicator">
+                        <span class="reply-indicator-text">Ответ {{ replyTo.sender }}: {{ replyTo.body }}</span>
+                        <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelReply" aria-label="Отменить"></button>
+                    </div>
                     <div class="composer-input-row">
                         <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
                         <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', '➤', [

@@ -67,6 +67,7 @@ class Events extends DB{
 
         $type = isset($data['msgtype']) ? strip_tags($data['msgtype']) : 'm.text';
         $body = isset($data['body']) ? strip_tags($data['body']) : '';
+        $replyTo = isset($data['reply_to']) ? strip_tags($data['reply_to']) : '';
         $fileUrl = null;
         $fileName = null;
         $fileType = null;
@@ -262,6 +263,21 @@ class Events extends DB{
             'sender'     => $sender,
             'avatar_url' => $user['avatar_url'] ?? ''
         ];
+
+        if ($replyTo) {
+            $replyToData = ['event_id' => $replyTo];
+            $sql = "SELECT json FROM event_json WHERE event_id = :eid AND room_id = :rid LIMIT 1";
+            self::setAssembly($sql);
+            $mReplied = $this->fetch(['eid' => $replyTo, 'rid' => $room['room_id']]);
+            if ($mReplied) {
+                $repliedJson = json_decode($mReplied['json'], true);
+                if ($repliedJson) {
+                    $replyToData['sender'] = $repliedJson['sender'] ?? '';
+                    $replyToData['body'] = $repliedJson['content']['body'] ?? $repliedJson['content']['file_name'] ?? '';
+                }
+            }
+            $content['reply_to'] = $replyToData;
+        }
 
         if ($fileUrl) {
             $content['file_url'] = $fileUrl;
