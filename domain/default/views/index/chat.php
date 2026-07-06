@@ -10,11 +10,15 @@ $fInvite = new Form();
 
     <div id="notify"></div>
 
+    <button class="rooms-toggle btn btn-dark" @click="showRooms = !showRooms" :class="{ active: showRooms }">
+        ☰
+    </button>
+
     <div class="prog_chat">
         
         <!-- Левая панель -->
-        <div class="rooms_board">
-            <div class="d-flex gap-1 p-1">
+        <div class="rooms_board" :class="{ visible: showRooms }">
+            <div class="rooms-header d-flex gap-1 p-1 align-items-center">
                 <button class="btn btn-primary btn-sm flex-grow-1" data-bs-toggle="modal" data-bs-target="#createRoom">
                     Добавить
                 </button>
@@ -24,6 +28,7 @@ $fInvite = new Form();
                 <button class="btn btn-outline-danger btn-sm" @click="logout" title="Выйти">
                     ⏻
                 </button>
+                <button class="btn btn-close btn-close-white d-md-none" @click="showRooms = false" title="Закрыть"></button>
             </div>
 
             <div class="rooms">
@@ -33,7 +38,7 @@ $fInvite = new Form();
 
                     <a href="#"
                        class="room-link"
-                       @click.prevent="openRoom(room)">
+                       @click.prevent="openRoom(room); showRooms = false">
                         <img v-if="room.avatar_url" :src="room.avatar_url" class="room-avatar-sm" alt="" />
                         <span v-else class="room-avatar-sm room-avatar-placeholder">{{ room.name.charAt(0) }}</span>
                         {{ room.name }}
@@ -42,6 +47,9 @@ $fInvite = new Form();
                 </div>
             </div>
         </div>
+
+        <!-- Затемнение для мобильной версии -->
+        <div class="rooms-overlay d-md-none" :class="{ visible: showRooms }" @click="showRooms = false"></div>
 
         <!-- Чат -->
         <div class="chat">
@@ -114,31 +122,33 @@ $fInvite = new Form();
             <!-- Форма -->
             <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
             <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
-                <div class="mb-2">
+                <div class="composer-input-row">
                     <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
+                    <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', '➤', [
+                        'class' => 'btn btn-primary'
+                    ])->Field()?>
                 </div>
-                <div class="mb-2 file-upload-wrapper">
-                    <input type="file" name="file" id="file" class="file-input" @change="onFileChange" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
-                    <label for="file" class="btn btn-outline-secondary file-upload-button">
-                        <span>Прикрепить файл</span>
-                    </label>
-                    <span class="file-upload-name" v-if="fileName">{{ fileName }}</span>
+                <div class="composer-actions">
+                    <div class="file-upload-wrapper">
+                        <input type="file" name="file" id="file" class="file-input" @change="onFileChange" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
+                        <label for="file" class="btn btn-outline-secondary file-upload-button" title="Прикрепить файл">
+                            <span>📎</span>
+                        </label>
+                        <span class="file-upload-name" v-if="fileName">{{ fileName }}</span>
+                    </div>
+                    <div>
+                        <input type="file" name="video_file" id="video" class="file-input" accept="video/*" @change="onVideoChange" />
+                        <label for="video" class="btn btn-outline-secondary file-upload-button" title="Видео">
+                            <span>🎬</span>
+                        </label>
+                    </div>
+                    <div>
+                        <input type="file" name="audio_file" id="audio" class="file-input" accept="audio/*" @change="onAudioChange" />
+                        <label for="audio" class="btn btn-outline-secondary file-upload-button" title="Аудио">
+                            <span>🎵</span>
+                        </label>
+                    </div>
                 </div>
-                <div class="mb-2">
-                    <input type="file" name="video_file" id="video" class="file-input" accept="video/*" @change="onVideoChange" />
-                    <label for="video" class="btn btn-outline-secondary file-upload-button">
-                        <span>Видео</span>
-                    </label>
-                </div>
-                <div class="mb-2">
-                    <input type="file" name="audio_file" id="audio" class="file-input" accept="audio/*" @change="onAudioChange" />
-                    <label for="audio" class="btn btn-outline-secondary file-upload-button">
-                        <span>Аудио</span>
-                    </label>
-                </div>
-                <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', 'Отправить', [
-                    'class' => 'btn btn-primary'
-                ])->Field()?>
             </div>
             <?=$fMessages->FormEnd();?>
         </div>

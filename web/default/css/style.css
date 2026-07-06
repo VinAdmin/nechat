@@ -1,9 +1,14 @@
+html, body{
+    min-height: 100vh;
+}
+
 body{
-    background: #000 url(../images/background.png) no-repeat;
+    background: #000 url(../images/background.png) no-repeat center center fixed;
     -webkit-background-size: cover;
     -moz-background-size: cover;
     -o-background-size: cover;
     background-size: cover;
+    background-attachment: fixed;
 }
 
 .content{
@@ -102,21 +107,31 @@ form *{
 }
 
 .messageComposer{
-    display: flex;
-    align-items: center;
-    gap: 10px;
     width: 100%;
-    flex-wrap: wrap;
-    margin-right: 2px;
+    padding: 8px 12px;
 }
 
-.messageComposer > .mb-2 {
-    margin-bottom: 0;
+.composer-input-row {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 8px;
 }
 
-.msgInput{
+.composer-input-row .msgInput {
     flex: 1;
-    min-width: 180px;
+    min-width: 0;
+}
+
+.composer-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.composer-actions > div {
+    margin-bottom: 0;
 }
 
 .file-upload-wrapper {
@@ -128,6 +143,11 @@ form *{
 
 .file-upload-name {
     max-width: 140px;
+    font-size: 0.85em;
+    color: rgba(255,255,255,0.7);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .msg{
@@ -414,4 +434,65 @@ form *{
 .room-link {
     display: flex;
     align-items: center;
+}
+
+/* Кнопка открытия списка комнат (мобильная) */
+.rooms-toggle {
+    display: none;
+    position: fixed;
+    z-index: 1050;
+    top: 10px;
+    left: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    padding: 0;
+    font-size: 1.2em;
+    line-height: 40px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Затемнение подложки */
+.rooms-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1020;
+    background: rgba(0,0,0,0.5);
+}
+
+/* Мобильная версия */
+@media (max-width: 767.98px) {
+    .rooms-toggle {
+        display: block;
+    }
+
+    .rooms_board {
+        position: fixed;
+        top: 0;
+        left: -280px;
+        width: 280px;
+        height: 100vh;
+        z-index: 1030;
+        transition: left 0.25s ease;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .rooms_board.visible {
+        left: 0;
+    }
+
+    .rooms-overlay.visible {
+        display: block;
+    }
+
+    .rooms-header .btn-close {
+        margin-left: auto;
+    }
+
+    .chat .room .row {
+        padding-left: 50px;
+    }
 }

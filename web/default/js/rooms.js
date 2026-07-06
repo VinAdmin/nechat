@@ -37,7 +37,8 @@ const app = Vue.createApp({
             publicRooms: [],
             publicSearchQuery: '',
             publicSearchSearched: false,
-            publicSearchLoading: false
+            publicSearchLoading: false,
+            showRooms: false
         }
     },
 
