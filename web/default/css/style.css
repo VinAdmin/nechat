@@ -66,10 +66,15 @@ form *{
     width: 20%;
     background: rgb(26 26 26 / 65%);
     backdrop-filter: blur(10px);
+    display: flex;
+    flex-direction: column;
+    max-height: 100vh;
 }
 
 .rooms{
     margin: 5px 5px 5px 5px;
+    overflow-y: auto;
+    flex: 1;
 }
 
 .room{
