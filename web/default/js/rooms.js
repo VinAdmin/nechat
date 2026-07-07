@@ -222,7 +222,7 @@ const app = Vue.createApp({
             }
             
             this.messages = this.messagesStore[this.roomId].filter(m =>
-                m.json?.content?.body || m.json?.content?.file_url
+                m.json?.content?.body || m.json?.content?.file_url || m.type === 'm.room.member'
             );
     
             this.$nextTick(() => {
@@ -267,7 +267,6 @@ const app = Vue.createApp({
                 let newEvents = 0;
                 for(const event of events){
                     if (!event?.event_id) continue;
-                    if (event.type === 'm.room.member') continue;
                     const exists = this.messagesStore[roomId].some(e => e.event_id === event.event_id);
                     if (!exists) {
                         this.messagesStore[roomId].push(event);

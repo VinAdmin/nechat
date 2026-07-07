@@ -206,6 +206,11 @@ form *{
     font-weight: 700;
 }
 
+.msg-join-text{
+    color:  #ff0000;
+    font-style: italic;
+}
+
 .msg-header{
     display: flex;
     justify-content: space-between;

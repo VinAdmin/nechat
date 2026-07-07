@@ -86,7 +86,22 @@ $fInvite = new Form();
                 <div class="list">
                 <div v-for="(msg, index) in messages" :key="msg.event_id">
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
-                    <div :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                        <div class="msg-header">
+                            <div class="msg-author">
+                                <span class="msg-author-name">{{ msg.json.content.displayname || msg.json.sender }}</span>
+                            </div>
+                            <div class="msg-header-right">
+                                <div class="msg-time" v-if="formatTime(msg)">
+                                    {{ formatTime(msg) }}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="msg-body">
+                            <div class="msg-join-text">присоединился к комнате</div>
+                        </div>
+                    </div>
+                    <div v-else :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
                         <div class="msg-header">
                             <div class="msg-author" v-if="msg.json?.content?.sender">
                                 <img v-if="msg.json.content.avatar_url" :src="msg.json.content.avatar_url" class="msg-avatar" alt="" />

@@ -238,7 +238,25 @@ class Rooms extends DB{
             'room_id' => $roomId,
             'sender'  => $sender
         ]);
-        
+
+        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $sender);
+
+        $json = json_encode([
+            'type'   => 'm.room.member',
+            'sender' => $sender,
+            'content' => [
+                'displayname' => $displayname,
+                'membership'  => 'join'
+            ]
+        ]);
+
+        $mEventJson = new EventJson();
+        $mEventJson->add([
+            'event_id' => $eventId,
+            'room_id'  => $roomId,
+            'json'     => $json
+        ]);
+
         $mRoomMemberships->addUser([
             'event_id'   => $eventId,
             'user_id'    => $sender,

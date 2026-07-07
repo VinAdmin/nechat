@@ -352,8 +352,10 @@ class Events extends DB{
 
             if($event['membership'] === 'join'){                            // Если это присоединение, то добавляем в массив join
                 $arr['rooms']['join'][$event['room_id']]['events'][] = [
-                    'event_id' => $event['event_id'],
-                    'json' => json_decode($event['json'], true)
+                    'event_id'   => $event['event_id'],
+                    'type'       => $event['type'],
+                    'received_ts' => $event['received_ts'],
+                    'json'       => json_decode($event['json'], true)
                 ];
             }
 

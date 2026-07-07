@@ -409,6 +409,31 @@ class V1Controller extends \wco\kernel\Controller{
             return json_encode(['error' => 'Unable to accept invite']);
         }
 
+        $mEvents = new Events();
+        $eventId = $mEvents->addEvent([
+            'type'    => 'm.room.member',
+            'room_id' => $params['roomId'],
+            'sender'  => $params['sender']
+        ]);
+
+        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $params['sender']);
+
+        $json = json_encode([
+            'type'   => 'm.room.member',
+            'sender' => $params['sender'],
+            'content' => [
+                'displayname' => $displayname,
+                'membership'  => 'join'
+            ]
+        ]);
+
+        $mEventJson = new EventJson();
+        $mEventJson->add([
+            'event_id' => $eventId,
+            'room_id'  => $params['roomId'],
+            'json'     => $json
+        ]);
+
         return json_encode(['status' => 'ok']);
     }
 
