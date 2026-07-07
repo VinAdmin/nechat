@@ -307,7 +307,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'update', 'upload_avatar'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'update', 'upload_avatar', 'delete'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -540,9 +540,85 @@ class V1Controller extends \wco\kernel\Controller{
         return $mRooms->updateRoom($params['sender']);
     }
 
+    private function delete(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        if(!isset($this->data['event_id'])){
+            return json_encode(['error' => 'Not event_id']);
+        }
+
+        $mFilter = new Filter();
+        $eventId = $mFilter->string($this->data['event_id']);
+
+        $mEvents = new Events();
+        $mEvents->select()->from()->where("event_id = :event_id");
+        $event = $mEvents->fetch(['event_id' => $eventId]);
+
+        if(!isset($event['event_id'])){
+            return json_encode(['error' => 'Event not found']);
+        }
+
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        $isOwner = isset($room['room_id']) && $room['creator'] === $params['sender'];
+
+        if($event['sender'] !== $params['sender'] && !$isOwner){
+            return json_encode(['error' => 'Only the author or room owner can delete the message']);
+        }
+
+        $mEventJson = new EventJson();
+        $mEventJson->select()->from()->where("event_id = :event_id AND room_id = :room_id");
+        $ej = $mEventJson->fetch([
+            'event_id' => $eventId,
+            'room_id'  => $params['roomId']
+        ]);
+
+        if(isset($ej['event_id'])){
+            $ejData = json_decode($ej['json'], true);
+            if(isset($ejData['content']['file_url'])){
+                $filePath = __DIR__ . '/../../../../../data/uploads/' . basename($ejData['content']['file_url']);
+                if(is_file($filePath)){
+                    unlink($filePath);
+                }
+            }
+        }
+
+        $redactEventId = $mEvents->addEvent([
+            'type'    => 'm.room.redaction',
+            'room_id' => $params['roomId'],
+            'sender'  => $params['sender']
+        ]);
+
+        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $params['sender']);
+
+        $json = json_encode([
+            'type'    => 'm.room.redaction',
+            'sender'  => $params['sender'],
+            'content' => [
+                'displayname' => $displayname,
+                'redacts'     => $eventId
+            ]
+        ]);
+
+        $mEventJson = new EventJson();
+        $mEventJson->add([
+            'event_id' => $redactEventId,
+            'room_id'  => $params['roomId'],
+            'json'     => $json
+        ]);
+
+        return json_encode(['status' => 'ok']);
+    }
+
     /**
-     * Загружает аватар комнаты.
-     *
+     * Загрузка аватара комнаты.
+     * 
      * @param array $params [roomId, sender]
      * @return string
      */

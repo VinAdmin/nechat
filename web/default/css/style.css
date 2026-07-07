@@ -268,6 +268,26 @@ form *{
     color: rgba(255,255,255,0.9);
 }
 
+.btn-delete{
+    background: none;
+    border: none;
+    color: rgba(255,80,80,0.5);
+    cursor: pointer;
+    font-size: 0.9em;
+    padding: 0 4px;
+    line-height: 1;
+    transition: color 0.15s;
+}
+
+.btn-delete:hover{
+    color: rgba(255,80,80,1);
+}
+
+.msg-deleted{
+    color: #888;
+    font-style: italic;
+}
+
 .reply-context{
     padding: 4px 8px;
     margin-bottom: 6px;

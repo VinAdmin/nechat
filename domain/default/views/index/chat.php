@@ -111,39 +111,45 @@ $fInvite = new Form();
                                 <div class="msg-time" v-if="formatTime(msg)">
                                     {{ formatTime(msg) }}
                                 </div>
-                                <button class="btn-reply" @click="setReply(msg)" title="Ответить">↩</button>
+                                <button v-if="!msg.json?.content?.deleted" class="btn-reply" @click="setReply(msg)" title="Ответить">↩</button>
+                                <button v-if="(isOwnMessage(msg) || isRoomOwner()) && !msg.json?.content?.deleted" class="btn-delete" @click="deleteMessage(msg.event_id)" title="Удалить">✕</button>
                             </div>
                         </div>
                         <div class="msg-body">
-                            <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
-                                <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
-                                <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
+                            <div v-if="msg.json?.content?.deleted" class="msg-deleted">
+                                Сообщение удалено
                             </div>
-                            <div v-if="msg.json?.content?.file_url">
-                                <div v-if="msg.json.content.file_type?.startsWith('image/')">
-                                    <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
+                            <template v-else>
+                                <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
+                                    <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
+                                    <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
                                 </div>
-                                <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
-                                    <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
-                                        <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
-                                        <div class="video-play-overlay">
-                                            <span class="video-play-icon">▶</span>
+                                <div v-if="msg.json?.content?.file_url">
+                                    <div v-if="msg.json.content.file_type?.startsWith('image/')">
+                                        <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
+                                    </div>
+                                    <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
+                                        <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
+                                            <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
+                                            <div class="video-play-overlay">
+                                                <span class="video-play-icon">▶</span>
+                                            </div>
                                         </div>
                                     </div>
+                                    <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
+                                        <span class="voice-label" v-if="msg.json.content.file_name?.startsWith('voice_')">🎤</span>
+                                        <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
+                                    </div>
+                                    <div v-else>
+                                        <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
+                                            {{ msg.json.content.file_name || 'Файл' }}
+                                        </a>
+                                    </div>
                                 </div>
-                                <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
-                                    <span class="voice-label" v-if="msg.json.content.file_name?.startsWith('voice_')">🎤</span>
-                                    <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
+                                <div v-if="msg.json?.content?.body">
+                                    {{ msg.json.content.body }}
                                 </div>
-                                <div v-else>
-                                    <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
-                                        {{ msg.json.content.file_name || 'Файл' }}
-                                    </a>
-                                </div>
-                            </div>
-                            <div v-if="msg.json?.content?.body">
-                                {{ msg.json.content.body }}
-                            </div>
+                            </template>
                         </div>
                     </div>
                 </div>

@@ -88,7 +88,10 @@ const app = Vue.createApp({
 
             if (this.roomId) {
                 const currentRoom = this.rooms.find(room => room.room_id === this.roomId);
-                this.roomMembership = currentRoom ? currentRoom.membership : this.roomMembership;
+                if (currentRoom) {
+                    this.roomMembership = currentRoom.membership;
+                    this.roomCreator = currentRoom.creator || null;
+                }
             }
 
             if (data.length === 0) {
@@ -267,6 +270,17 @@ const app = Vue.createApp({
                 let newEvents = 0;
                 for(const event of events){
                     if (!event?.event_id) continue;
+
+                    if (event.type === 'm.room.redaction') {
+                        const redacts = event.json?.content?.redacts;
+                        if (redacts) {
+                            const target = this.messagesStore[roomId]?.find(m => m.event_id === redacts);
+                            if (target) {
+                                target.json.content.deleted = true;
+                            }
+                        }
+                    }
+
                     const exists = this.messagesStore[roomId].some(e => e.event_id === event.event_id);
                     if (!exists) {
                         this.messagesStore[roomId].push(event);
@@ -735,7 +749,10 @@ const app = Vue.createApp({
          * @returns {boolean}
          */
         isRoomOwner() {
-            return this.roomCreator === localStorage.getItem('user_id');
+            const uid = localStorage.getItem('user_id');
+            if (this.roomCreator === uid) return true;
+            const room = this.rooms.find(r => r.room_id === this.roomId);
+            return room?.creator === uid;
         },
 
         isOwnMessage(msg) {
@@ -919,6 +936,33 @@ const app = Vue.createApp({
          * @param {string} userId
          * @returns {Promise<void>}
          */
+        async deleteMessage(eventId) {
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/delete', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ event_id: eventId })
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            const msg = this.messagesStore[this.roomId]?.find(m => m.event_id === eventId);
+            if (msg) {
+                msg.json.content.deleted = true;
+            }
+
+            this.updateMessages();
+        },
+
         async unban(userId) {
             const token = localStorage.getItem('token');
             const currentUser = localStorage.getItem('user_id');
