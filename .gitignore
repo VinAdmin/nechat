@@ -19,3 +19,4 @@ vendor/
 storage/*
 web/default/uploads/
 .vscode
+data/*
