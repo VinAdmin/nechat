@@ -60,6 +60,32 @@ const app = Vue.createApp({
 
     methods: {
 
+        saveCache() {
+            try {
+                localStorage.setItem('messagesStore', JSON.stringify(this.messagesStore));
+                localStorage.setItem('unreadCounts', JSON.stringify(this.unreadCounts));
+            } catch (e) {
+                // ignore quota errors
+            }
+        },
+
+        loadCache() {
+            try {
+                const ms = localStorage.getItem('messagesStore');
+                if (ms) {
+                    this.messagesStore = JSON.parse(ms);
+                    const st = sessionStorage.getItem("sync");
+                    if (st && Object.keys(this.messagesStore).length > 0) {
+                        this.syncToken = st;
+                    }
+                }
+                const uc = localStorage.getItem('unreadCounts');
+                if (uc) this.unreadCounts = JSON.parse(uc);
+            } catch (e) {
+                // ignore parse errors
+            }
+        },
+
         /**
          * Загружает список комнат, в которые вошёл текущий пользователь.
          * Обновляет локальный массив комнат и состояние участия пользователя.
@@ -254,6 +280,7 @@ const app = Vue.createApp({
             if (data.error) {
                 notify(data.error, 'warning', 5000);
                 localStorage.clear();
+                sessionStorage.clear();
                 window.location.href = '/';
                 return;
             }
@@ -315,6 +342,7 @@ const app = Vue.createApp({
             
             sessionStorage.setItem("sync", this.syncToken);
 
+            this.saveCache();
             this.updateMessages();
         },
 
@@ -334,10 +362,17 @@ const app = Vue.createApp({
          */
         parseHash() {
             const hash = window.location.hash.substring(1);
-            const params = new URLSearchParams(hash);
+            let id = null;
+            let name = null;
 
-            const id = params.get('room');
-            const name = params.get('name');
+            if (hash.startsWith('room_')) {
+                id = hash.replace('room_', '');
+                name = localStorage.getItem('room_name');
+            } else {
+                const params = new URLSearchParams(hash);
+                id = params.get('room');
+                name = params.get('name');
+            }
 
             if (id) {
                 this.roomId = id;
@@ -766,8 +801,14 @@ const app = Vue.createApp({
          * @param {Object} msg
          * @returns {string|null}
          */
+        msgTs(msg) {
+            const ts = msg.received_ts || msg.json?.origin_server_ts || (typeof msg.json === 'string' ? JSON.parse(msg.json).origin_server_ts : null);
+            if (!ts) return null;
+            return ts < 1e12 ? ts * 1000 : ts;
+        },
+
         msgDate(msg) {
-            const ts = msg.received_ts || msg.json?.origin_server_ts;
+            const ts = this.msgTs(msg);
             if (!ts) return null;
             const d = new Date(ts);
             return d.toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
@@ -776,8 +817,8 @@ const app = Vue.createApp({
         showDateSeparator(msg, index) {
             if (index === 0) return true;
             const prev = this.messages[index - 1];
-            const prevTs = prev.received_ts || prev.json?.origin_server_ts;
-            const currTs = msg.received_ts || msg.json?.origin_server_ts;
+            const prevTs = this.msgTs(prev);
+            const currTs = this.msgTs(msg);
             if (!prevTs || !currTs) return false;
             const prevDate = new Date(prevTs);
             const currDate = new Date(currTs);
@@ -785,10 +826,8 @@ const app = Vue.createApp({
         },
 
         formatTime(msg) {
-            const ts = msg.received_ts || msg.json?.origin_server_ts || (typeof msg.json === 'string' ? JSON.parse(msg.json).origin_server_ts : null);
-            if (!ts) {
-                return null;
-            }
+            const ts = this.msgTs(msg);
+            if (!ts) return null;
 
             const date = new Date(ts);
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -1295,8 +1334,10 @@ const app = Vue.createApp({
         }
 
         document.cookie = 'token=' + encodeURIComponent(token) + '; path=/; max-age=86400; SameSite=Lax';
+        this.loadCache();
         this.joinedRooms();
         this.parseHash();
+        this.sync();
 
         window.addEventListener('hashchange', this.parseHash);
 
@@ -1316,6 +1357,7 @@ const app = Vue.createApp({
         if (roomId) {
             this.roomId = roomId;
             this.roomName = localStorage.getItem('room_name');
+            this.updateMessages();
         }
         
         document.getElementById('formInvite')
