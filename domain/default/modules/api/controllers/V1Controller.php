@@ -164,7 +164,7 @@ class V1Controller extends \wco\kernel\Controller{
             $avatarUrl = $data['avatar_url'] ?? '';
 
             if(!empty($_FILES['avatar']) && $_FILES['avatar']['error'] === UPLOAD_ERR_OK){
-                $uploadDir = __DIR__ . '/../../../../../web/default/uploads';
+                $uploadDir = __DIR__ . '/../../../../../data/uploads';
                 if(!is_dir($uploadDir)){
                     http_response_code(500);
                     echo json_encode(["error" => "Upload directory not found"]);
@@ -565,7 +565,7 @@ class V1Controller extends \wco\kernel\Controller{
             return json_encode(['error' => 'File upload error']);
         }
 
-        $uploadDir = __DIR__ . '/../../../../../web/default/uploads';
+        $uploadDir = __DIR__ . '/../../../../../data/uploads';
         if(!is_dir($uploadDir)){
             return json_encode(['error' => 'Upload directory not found']);
         }

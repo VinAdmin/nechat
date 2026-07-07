@@ -73,7 +73,7 @@ class Events extends DB{
         $fileType = null;
         $fileSize = null;
 
-        $uploadDir = __DIR__ . '/../web/default/uploads';
+        $uploadDir = __DIR__ . '/../data/uploads';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }

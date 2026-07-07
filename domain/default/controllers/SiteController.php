@@ -48,7 +48,7 @@ class SiteController extends \wco\kernel\Controller{
             return true;
         }
         
-        $uploadDir = dirname(__DIR__, 3) . '/web/default/uploads';
+        $uploadDir = dirname(__DIR__, 3) . '/data/uploads';
         $filePath = $uploadDir . '/' . $fileName;
         
 
