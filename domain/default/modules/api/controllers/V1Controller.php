@@ -431,6 +431,12 @@ class V1Controller extends \wco\kernel\Controller{
             return json_encode(['error' => 'Not user_id']);
         }
 
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
+            return json_encode(['error' => 'Only the room creator can ban users']);
+        }
+
         $mFilter = new Filter();
         $userId = $mFilter->string($this->data['user_id']);
 
@@ -465,6 +471,12 @@ class V1Controller extends \wco\kernel\Controller{
 
         if(count($this->data) === 0 || !isset($this->data['user_id'])){
             return json_encode(['error' => 'Not user_id']);
+        }
+
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
+            return json_encode(['error' => 'Only the room creator can unban users']);
         }
 
         $mFilter = new Filter();

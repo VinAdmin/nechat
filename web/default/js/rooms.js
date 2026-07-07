@@ -53,7 +53,8 @@ const app = Vue.createApp({
             voiceSeconds: 0,
             unreadCounts: {},
             prevRoomCounts: {},
-            replyTo: null
+            replyTo: null,
+            roomCreator: null
         }
     },
 
@@ -109,6 +110,7 @@ const app = Vue.createApp({
             this.roomAvatar = room.avatar_url || '';
             this.roomJoinRule = room.join_rule || 'public';
             this.roomMembership = room.membership || null;
+            this.roomCreator = room.creator || null;
 
             localStorage.setItem('room_id', room.room_id);
             localStorage.setItem('room_name', room.name);
@@ -334,6 +336,7 @@ const app = Vue.createApp({
                     this.roomAvatar = currentRoom.avatar_url || '';
                     this.roomJoinRule = currentRoom.join_rule || 'public';
                     this.roomMembership = currentRoom.membership || null;
+                    this.roomCreator = currentRoom.creator || null;
                 }
 
                 this.updateMessages();
@@ -704,6 +707,10 @@ const app = Vue.createApp({
          * @param {Object} msg
          * @returns {boolean}
          */
+        isRoomOwner() {
+            return this.roomCreator === localStorage.getItem('user_id');
+        },
+
         isOwnMessage(msg) {
             const currentUser = localStorage.getItem('user_id');
             const sender = msg.json?.content?.sender || null;
@@ -853,6 +860,12 @@ const app = Vue.createApp({
          */
         async ban(userId) {
             const token = localStorage.getItem('token');
+            const currentUser = localStorage.getItem('user_id');
+
+            if (this.roomCreator !== currentUser) {
+                notify('Только владелец комнаты может банить пользователей', 'warning', 5000);
+                return;
+            }
 
             const res = await fetch('/api/v1/rooms/'+ this.roomId +'/ban', {
                 method: 'POST',
@@ -881,6 +894,12 @@ const app = Vue.createApp({
          */
         async unban(userId) {
             const token = localStorage.getItem('token');
+            const currentUser = localStorage.getItem('user_id');
+
+            if (this.roomCreator !== currentUser) {
+                notify('Только владелец комнаты может снимать бан', 'warning', 5000);
+                return;
+            }
 
             const res = await fetch('/api/v1/rooms/'+ this.roomId +'/unban', {
                 method: 'POST',
