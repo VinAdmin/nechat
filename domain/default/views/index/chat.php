@@ -141,7 +141,7 @@ $fInvite = new Form();
                         <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelReply" aria-label="Отменить"></button>
                     </div>
                     <div class="composer-input-row">
-                        <?=$fMessages->Input('text', 'body', '', ['class' => 'msgInput', 'placeholder' => 'Введите сообщение'])->Field()?>
+                        <textarea name="body" class="msgInput" placeholder="Введите сообщение" rows="1" @keydown="onBodyKeydown" @input="resizeTextarea" ref="bodyInput"></textarea>
                         <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', '➤', [
                             'class' => 'btn btn-primary'
                         ])->Field()?>

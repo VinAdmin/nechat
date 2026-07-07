@@ -348,6 +348,20 @@ const app = Vue.createApp({
          * @param {SubmitEvent} e
          * @returns {Promise<void>}
          */
+        onBodyKeydown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const form = e.target.closest('form');
+                if (form) form.requestSubmit();
+            }
+        },
+
+        resizeTextarea(e) {
+            const el = e.target;
+            el.style.height = 'auto';
+            el.style.height = el.scrollHeight + 'px';
+        },
+
         async sendMessage(e) {
             e.preventDefault();
 
@@ -356,7 +370,7 @@ const app = Vue.createApp({
             const fileInput = form.querySelector('input[name="file"]');
             const videoInput = form.querySelector('input[name="video_file"]');
             const file = fileInput?.files?.[0] || videoInput?.files?.[0];
-            const bodyText = form.querySelector('input[name="body"]')?.value || '';
+            const bodyText = form.querySelector('textarea[name="body"], input[name="body"]')?.value || '';
 
             if (!file && !bodyText.trim()) {
                 notify('Введите сообщение или выберите файл', 'warning', 4000);
@@ -370,6 +384,13 @@ const app = Vue.createApp({
                 this.replyTo = null;
                 form.reset();
                 this.fileName = '';
+                this.$nextTick(() => {
+                    const bodyEl = form.querySelector('textarea[name="body"]');
+                    if (bodyEl) {
+                        bodyEl.style.height = 'auto';
+                        bodyEl.style.height = bodyEl.scrollHeight + 'px';
+                    }
+                });
                 return;
             }
 
@@ -399,6 +420,13 @@ const app = Vue.createApp({
             form.reset();
             this.fileName = '';
             this.replyTo = null;
+            this.$nextTick(() => {
+                const bodyEl = form.querySelector('textarea[name="body"]');
+                if (bodyEl) {
+                    bodyEl.style.height = 'auto';
+                    bodyEl.style.height = bodyEl.scrollHeight + 'px';
+                }
+            });
         },
 
         async uploadFileInChunks({form, token, file, bodyText, roomId, replyTo}) {
