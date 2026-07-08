@@ -91,6 +91,12 @@ class Events extends DB{
             'flac' => 'audio/flac', 'aac' => 'audio/aac', 'm4a' => 'audio/mp4',
             'wma' => 'audio/x-ms-wma', 'opus' => 'audio/opus', 'webm' => 'audio/webm'
         ];
+        $imageMimes = [
+            'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+            'gif' => 'image/gif', 'webp' => 'image/webp', 'bmp' => 'image/bmp',
+            'svg' => 'image/svg+xml', 'ico' => 'image/x-icon',
+            'avif' => 'image/avif'
+        ];
 
         $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;
         $chunkIndex = isset($data['chunk_index']) ? (int)$data['chunk_index'] : 0;
@@ -161,7 +167,9 @@ class Events extends DB{
                 $fileType = $fileInfo['type'];
                 $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 if ($fileType === 'application/octet-stream') {
-                    if (isset($videoMimes[$fileExt])) {
+                    if (isset($imageMimes[$fileExt])) {
+                        $fileType = $imageMimes[$fileExt];
+                    } elseif (isset($videoMimes[$fileExt])) {
                         $fileType = $videoMimes[$fileExt];
                     } elseif (isset($audioMimes[$fileExt])) {
                         $fileType = $audioMimes[$fileExt];
@@ -192,7 +200,9 @@ class Events extends DB{
                 $fileType = $fileInfo['type'];
                 $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 if ($fileType === 'application/octet-stream') {
-                    if (isset($videoMimes[$fileExt])) {
+                    if (isset($imageMimes[$fileExt])) {
+                        $fileType = $imageMimes[$fileExt];
+                    } elseif (isset($videoMimes[$fileExt])) {
                         $fileType = $videoMimes[$fileExt];
                     } elseif (isset($audioMimes[$fileExt])) {
                         $fileType = $audioMimes[$fileExt];
