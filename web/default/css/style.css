@@ -669,6 +669,10 @@ form *{
 
 /* Мобильная версия */
 @media (max-width: 767.98px) {
+    .block-authorisation{
+        top: 30%;
+    }
+    
     .rooms-toggle {
         display: block;
     }
