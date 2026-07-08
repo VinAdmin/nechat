@@ -1,7 +1,6 @@
 config/config.php
 config/db.php
 Access.komodoproject
-.htaccess
 *.log
 composer.lock
 *.db3
