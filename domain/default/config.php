@@ -1,7 +1,7 @@
 <?php
 \wco\kernel\WCO::setCss([
     '/default/bootstrap-5.3.8/css/bootstrap.css',
-    '/default/css/style.css?v=1',
+    '/default/css/style.css?v=2',
 ]);
 \wco\kernel\WCO::setJs([
     '/default/js/jquery-3.6.0.js',
