@@ -115,6 +115,10 @@ const app = Vue.createApp({
             if (this.roomId) {
                 const currentRoom = this.rooms.find(room => room.room_id === this.roomId);
                 if (currentRoom) {
+                    this.roomName = currentRoom.name || '';
+                    this.roomTopic = currentRoom.topic || '';
+                    this.roomAvatar = currentRoom.avatar_url || '';
+                    this.roomJoinRule = currentRoom.join_rule || 'public';
                     this.roomMembership = currentRoom.membership;
                     this.roomCreator = currentRoom.creator || null;
                 }
@@ -315,12 +319,22 @@ const app = Vue.createApp({
                     }
                 }
 
-                if (newEvents > 0 && roomId !== this.roomId) {
-                    this.unreadCounts[roomId] = (this.unreadCounts[roomId] || 0) + newEvents;
-                    const room = this.rooms.find(r => r.room_id === roomId);
-                    const sender = events[0]?.json?.content?.sender || '';
-                    const body = events[0]?.json?.content?.body || '';
-                    this.notify(room?.name || roomId, sender, body);
+                if (newEvents > 0) {
+                    if (roomId !== this.roomId) {
+                        this.unreadCounts[roomId] = (this.unreadCounts[roomId] || 0) + newEvents;
+                        const lastEvent = events[events.length - 1];
+                        const room = this.rooms.find(r => r.room_id === roomId);
+                        const sender = lastEvent?.json?.content?.sender || '';
+                        const body = lastEvent?.json?.content?.body || '';
+                        const roomName = room?.name || roomId;
+                        this.notifyBrowser(roomName, sender, body);
+                        if (sender && sender !== localStorage.getItem('user_id')) {
+                            this.playNotificationSound();
+                            if (body) {
+                                notify(roomName + ': ' + sender, 'info', 4000);
+                            }
+                        }
+                    }
                 }
             }
 
@@ -346,7 +360,50 @@ const app = Vue.createApp({
             this.updateMessages();
         },
 
-        notify(roomName, sender, body) {
+        playNotificationSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                if (ctx.state === 'suspended') {
+                    ctx.resume();
+                }
+
+                const notes = [523.25, 659.25, 783.99];
+                const noteLen = 0.08;
+                const startTime = ctx.currentTime + 0.02;
+
+                for (let i = 0; i < notes.length; i++) {
+                    const g = ctx.createGain();
+                    g.connect(ctx.destination);
+                    g.gain.setValueAtTime(0, startTime + i * noteLen);
+                    g.gain.linearRampToValueAtTime(0.25, startTime + i * noteLen + 0.01);
+                    g.gain.exponentialRampToValueAtTime(0.001, startTime + i * noteLen + 0.2);
+
+                    const o = ctx.createOscillator();
+                    o.connect(g);
+                    o.type = 'triangle';
+                    o.frequency.value = notes[i];
+                    o.start(startTime + i * noteLen);
+                    o.stop(startTime + i * noteLen + 0.2);
+
+                    const g2 = ctx.createGain();
+                    g2.connect(ctx.destination);
+                    g2.gain.setValueAtTime(0, startTime + i * noteLen);
+                    g2.gain.linearRampToValueAtTime(0.08, startTime + i * noteLen + 0.01);
+                    g2.gain.exponentialRampToValueAtTime(0.001, startTime + i * noteLen + 0.15);
+
+                    const o2 = ctx.createOscillator();
+                    o2.connect(g2);
+                    o2.type = 'sine';
+                    o2.frequency.value = notes[i] * 2;
+                    o2.start(startTime + i * noteLen);
+                    o2.stop(startTime + i * noteLen + 0.15);
+                }
+            } catch (e) {
+                // audio not available
+            }
+        },
+
+        notifyBrowser(roomName, sender, body) {
             if (document.hidden && window.Notification && Notification.permission === 'granted') {
                 new Notification(roomName, {
                     body: sender + ': ' + body,

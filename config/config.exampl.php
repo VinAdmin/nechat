@@ -4,6 +4,9 @@
  */
 
 ini_set('date.timezone', 'Asia/Tashkent');
+
+//define('SECRET_KEY', '');
+
 $config = [
     'template' => 'default', //Подключаемая дериктория шаблона.
     'protocol' => 'http://', //Исполняемый протокол
