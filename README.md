@@ -15,7 +15,7 @@
 ### 1. Клонировать репозиторий
 
 ```bash
-git clone <repo-url> /var/www/chat
+git clone https://github.com/VinAdmin/nechat.git /var/www/chat
 cd /var/www/chat
 ```
 
