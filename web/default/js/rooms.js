@@ -115,6 +115,10 @@ const app = Vue.createApp({
             if (this.roomId) {
                 const currentRoom = this.rooms.find(room => room.room_id === this.roomId);
                 if (currentRoom) {
+                    this.roomName = currentRoom.name || '';
+                    this.roomTopic = currentRoom.topic || '';
+                    this.roomAvatar = currentRoom.avatar_url || '';
+                    this.roomJoinRule = currentRoom.join_rule || 'public';
                     this.roomMembership = currentRoom.membership;
                     this.roomCreator = currentRoom.creator || null;
                 }
