@@ -29,7 +29,7 @@ $fInvite = new Form();
                     👤
                 </button>
                 <button class="btn btn-outline-danger btn-sm" @click="logout" title="Выйти">
-                    ⏻
+                    <i class="fa fa-power-off" aria-hidden="true"></i>
                 </button>
             </div>
 
