@@ -9,5 +9,5 @@
     '/default/bootstrap-5.3.8/js/bootstrap.js',
     '/default/js/notify.js',
     '/default/js/vue.global.min.3.5.32.js',
-    '/default/js/rooms.js?v=2'
+    '/default/js/rooms.js?v=3'
 ], 'end');

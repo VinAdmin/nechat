@@ -54,7 +54,8 @@ const app = Vue.createApp({
             unreadCounts: {},
             prevRoomCounts: {},
             replyTo: null,
-            roomCreator: null
+            roomCreator: null,
+            syncFailed: false
         }
     },
 
@@ -272,12 +273,29 @@ const app = Vue.createApp({
         async sync() {
             const token = localStorage.getItem('token');
 
-            const res = await fetch('/api/v1/sync/?since=' + this.syncToken, {
-                headers: {
-                    "Authorization": "Bearer " + token,
-                    'Content-Type': 'application/json'
+            let res;
+            try {
+                res = await fetch('/api/v1/sync/?since=' + this.syncToken, {
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+            } catch (e) {
+                if (!this.syncFailed) {
+                    this.syncFailed = true;
+                    notify('Нет соединения с сервером', 'warning', 3000);
                 }
-            });
+                return;
+            }
+
+            if (!res.ok) {
+                if (!this.syncFailed) {
+                    this.syncFailed = true;
+                    notify('Ошибка сервера: ' + res.status, 'warning', 5000);
+                }
+                return;
+            }
 
             const data = await res.json();
             
@@ -287,6 +305,11 @@ const app = Vue.createApp({
                 sessionStorage.clear();
                 window.location.href = '/';
                 return;
+            }
+
+            if (this.syncFailed) {
+                this.syncFailed = false;
+                notify('Соединение восстановлено', 'success', 3000);
             }
             
             const rooms = data.rooms?.join || {};
