@@ -383,6 +383,23 @@ const app = Vue.createApp({
 
             this.saveCache();
             this.updateMessages();
+            this.checkVersion();
+        },
+
+        async checkVersion() {
+            try {
+                const res = await fetch('/api/v1/version/', { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.hash) return;
+                if (!window.APP_HASH) {
+                    window.APP_HASH = data.hash;
+                } else if (data.hash !== window.APP_HASH) {
+                    location.reload();
+                }
+            } catch (e) {
+                // ignore
+            }
         },
 
         playNotificationSound() {
