@@ -55,7 +55,8 @@ const app = Vue.createApp({
             prevRoomCounts: {},
             replyTo: null,
             roomCreator: null,
-            syncFailed: false
+            syncFailed: false,
+            pendingScroll: false
         }
     },
 
@@ -214,10 +215,10 @@ const app = Vue.createApp({
             const el = this.$refs.messages;
             if (!el) return;
 
-            el.scrollTo({
-                top: el.scrollHeight,
-                behavior: smooth ? 'smooth' : 'auto'
-            });
+            el.scrollTop = el.scrollHeight;
+            if (smooth) {
+                el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+            }
         },
 
         scrollToMessage(eventId) {
@@ -248,7 +249,8 @@ const app = Vue.createApp({
          * Обновляет отображаемый массив сообщений из кеша для активной комнаты.
          */
         updateMessages() {
-            const shouldScroll = this.isAtBottom();
+            const shouldScroll = this.pendingScroll || this.isAtBottom();
+            this.pendingScroll = false;
             
             if (!this.messagesStore[this.roomId]) {
                 this.messages = [];
@@ -512,15 +514,16 @@ const app = Vue.createApp({
                 this.replyTo = null;
                 form.reset();
                 this.fileName = '';
-                this.$nextTick(() => {
-                    const bodyEl = form.querySelector('textarea[name="body"]');
-                    if (bodyEl) {
-                        bodyEl.style.height = 'auto';
-                        bodyEl.style.height = bodyEl.scrollHeight + 'px';
-                    }
-                });
-                return;
-            }
+            this.$nextTick(() => {
+                const bodyEl = form.querySelector('textarea[name="body"]');
+                if (bodyEl) {
+                    bodyEl.style.height = 'auto';
+                    bodyEl.style.height = bodyEl.scrollHeight + 'px';
+                }
+            });
+            this.pendingScroll = true;
+            return;
+        }
 
             const formData = new FormData(form);
             formData.delete('video_file');
@@ -555,6 +558,7 @@ const app = Vue.createApp({
                     bodyEl.style.height = bodyEl.scrollHeight + 'px';
                 }
             });
+            this.pendingScroll = true;
         },
 
         async uploadFileInChunks({form, token, file, bodyText, roomId, replyTo}) {
@@ -651,6 +655,7 @@ const app = Vue.createApp({
 
             this.replyTo = null;
             e.target.value = '';
+            this.pendingScroll = true;
         },
 
         async onAudioChange(e) {
@@ -689,6 +694,7 @@ const app = Vue.createApp({
 
             this.replyTo = null;
             e.target.value = '';
+            this.pendingScroll = true;
         },
 
         async startVoice() {
@@ -766,6 +772,7 @@ const app = Vue.createApp({
             this.voiceChunks = [];
             this.voiceSeconds = 0;
             this.replyTo = null;
+            this.pendingScroll = true;
         },
 
         formatVoiceTime(s) {

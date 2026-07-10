@@ -82,8 +82,8 @@ $fInvite = new Form();
                 </div>
             </div>
 
-            <div class="messages" ref="messages">
-                <div class="list">
+            <div class="messages">
+                <div class="list" ref="messages">
                 <div v-for="(msg, index) in messages" :key="msg.event_id">
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
                     <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
