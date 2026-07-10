@@ -241,8 +241,11 @@ const app = Vue.createApp({
             } catch (e) {
                 target.scrollIntoView(true);
             }
-            target.classList.add('msg-highlight');
-            setTimeout(() => target.classList.remove('msg-highlight'), 2000);
+            const bubble = target.querySelector('.msg-bubble');
+            if (bubble) {
+                bubble.classList.add('msg-highlight');
+                setTimeout(() => bubble.classList.remove('msg-highlight'), 2000);
+            }
         },
 
         /**
@@ -898,6 +901,22 @@ const app = Vue.createApp({
             const currentUser = localStorage.getItem('user_id');
             const sender = msg.json?.content?.sender || null;
             return currentUser && sender === currentUser;
+        },
+
+        isSameSender(index) {
+            if (index <= 0) return false;
+            const prev = this.messages[index - 1];
+            const curr = this.messages[index];
+            if (!prev || !curr) return false;
+            if (prev.type === 'm.room.member' || curr.type === 'm.room.member') return false;
+            const prevSender = prev.json?.content?.sender;
+            const currSender = curr.json?.content?.sender;
+            if (!prevSender || !currSender) return false;
+            if (prevSender !== currSender) return false;
+            const prevTs = this.msgTs(prev);
+            const currTs = this.msgTs(curr);
+            if (!prevTs || !currTs) return false;
+            return (currTs - prevTs) < 300000;
         },
 
         /**
