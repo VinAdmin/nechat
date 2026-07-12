@@ -1181,6 +1181,41 @@ const app = Vue.createApp({
         },
 
         /**
+         * Выгоняет пользователя из комнаты (только владелец).
+         * В отличие от бана, пользователь сможет повторно войти в публичную комнату.
+         * @param {string} userId
+         * @returns {Promise<void>}
+         */
+        async kick(userId) {
+            const token = localStorage.getItem('token');
+            const currentUser = localStorage.getItem('user_id');
+
+            if (this.roomCreator !== currentUser) {
+                notify('Только владелец комнаты может выгонять пользователей', 'warning', 5000);
+                return;
+            }
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/kick', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: userId })
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            notify('Пользователь выгнан из комнаты', 'success', 4000);
+            this.openMembers(this.roomId);
+        },
+
+        /**
          * Ищет публичные комнаты по запросу.
          * @returns {Promise<void>}
          */

@@ -307,7 +307,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'update', 'upload_avatar', 'delete'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'update', 'upload_avatar', 'delete'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -516,6 +516,46 @@ class V1Controller extends \wco\kernel\Controller{
 
         if (!$updateResult) {
             return json_encode(['error' => 'Unable to unban user']);
+        }
+
+        return json_encode(['status' => 'ok']);
+    }
+
+    /**
+     * Выгоняет пользователя из комнаты (удаляет членство).
+     * В отличие от бана, пользователь может повторно войти в публичную комнату.
+     * 
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function kick(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        if(count($this->data) === 0 || !isset($this->data['user_id'])){
+            return json_encode(['error' => 'Not user_id']);
+        }
+
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
+            return json_encode(['error' => 'Only the room creator can kick users']);
+        }
+
+        $mFilter = new Filter();
+        $userId = $mFilter->string($this->data['user_id']);
+
+        $mRoomMemberships = new RoomMemberships();
+        $mRoomMemberships->delete("room_id = :roomId AND user_id = :userId")
+                ->execute([':roomId' => $params['roomId'], ':userId' => $userId]);
+
+        if (!$mRoomMemberships) {
+            return json_encode(['error' => 'Unable to kick user']);
         }
 
         return json_encode(['status' => 'ok']);

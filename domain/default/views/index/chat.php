@@ -384,8 +384,13 @@ $fInvite = new Form();
                                 {{ member.user_id }}
                                 <span v-if="member.membership === 'ban'" class="badge bg-danger ms-2">Забанен</span>
                             </span>
-                            <button v-if="isRoomOwner() && member.membership === 'ban'" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
-                            <button v-else-if="isRoomOwner() && member.membership !== 'ban' && member.user_id !== roomCreator" class="btn btn-danger btn-sm" @click="ban(member.user_id)">Забанить</button>
+                            <span v-if="isRoomOwner() && member.user_id !== roomCreator" class="d-flex gap-1">
+                                <button v-if="member.membership === 'ban'" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
+                                <template v-else>
+                                    <button class="btn btn-outline-warning btn-sm" @click="kick(member.user_id)" title="Выгнать (можно вернуться)">Выгнать</button>
+                                    <button class="btn btn-danger btn-sm" @click="ban(member.user_id)" title="Забанить (навсегда)">Забанить</button>
+                                </template>
+                            </span>
                         </div>
                     </div>
                 </div>
