@@ -151,6 +151,12 @@ $fInvite = new Form();
                         ])->Field()?>
                 </div>
                 <div class="composer-actions">
+                    <div v-if="uploadProgress !== null" class="upload-progress-bar">
+                        <div class="upload-progress-track">
+                            <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+                        </div>
+                        <span class="upload-progress-text">{{ uploadProgress }}%</span>
+                    </div>
                     <div class="file-upload-wrapper">
                         <input type="file" name="file" id="file" class="file-input" @change="onFileChange" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
                         <label for="file" class="btn btn-outline-secondary file-upload-button" title="Прикрепить файл">

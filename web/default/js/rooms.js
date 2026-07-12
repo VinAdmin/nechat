@@ -56,7 +56,8 @@ const app = Vue.createApp({
             replyTo: null,
             roomCreator: null,
             syncFailed: false,
-            pendingScroll: false
+            pendingScroll: false,
+            uploadProgress: null
         }
     },
 
@@ -512,6 +513,36 @@ const app = Vue.createApp({
             el.style.height = el.scrollHeight + 'px';
         },
 
+        uploadWithProgress(formData) {
+            return new Promise((resolve, reject) => {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/v1/rooms/');
+                xhr.setRequestHeader('Authorization', 'Bearer ' + localStorage.getItem('token'));
+
+                xhr.upload.onprogress = (e) => {
+                    if (e.lengthComputable) {
+                        this.uploadProgress = Math.round((e.loaded / e.total) * 100);
+                    }
+                };
+
+                xhr.onload = () => {
+                    this.uploadProgress = null;
+                    try {
+                        resolve(JSON.parse(xhr.responseText));
+                    } catch {
+                        reject(new Error('Invalid JSON'));
+                    }
+                };
+
+                xhr.onerror = () => {
+                    this.uploadProgress = null;
+                    reject(new Error('Network error'));
+                };
+
+                xhr.send(formData);
+            });
+        },
+
         async sendMessage(e) {
             e.preventDefault();
 
@@ -555,13 +586,18 @@ const app = Vue.createApp({
                 formData.append('file', file, file.name);
             }
 
-            const res = await fetch('/api/v1/rooms/', {
-                method: 'POST',
-                headers: { "Authorization": "Bearer " + token },
-                body: formData
-            });
-
-            const result = await res.json();
+            const hasFile = !!file;
+            let result;
+            if (hasFile) {
+                result = await this.uploadWithProgress(formData);
+            } else {
+                const res = await fetch('/api/v1/rooms/', {
+                    method: 'POST',
+                    headers: { "Authorization": "Bearer " + token },
+                    body: formData
+                });
+                result = await res.json();
+            }
 
             if (result.error) {
                 notify(result.error, 'warning', 5000);
@@ -586,42 +622,48 @@ const app = Vue.createApp({
             const chunkCount = Math.ceil(file.size / chunkSize);
             const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 
-            for (let index = 1; index <= chunkCount; index++) {
-                const chunk = file.slice((index - 1) * chunkSize, index * chunkSize);
-                const formData = new FormData();
-                formData.append('room_id', roomId);
-                formData.append('msgtype', 'm.file');
-                formData.append('upload_id', uploadId);
-                formData.append('chunk_index', index);
-                formData.append('chunk_count', chunkCount);
-                formData.append('file_name', file.name);
-                formData.append('file_size', file.size);
-                if (replyTo) {
-                    formData.append('reply_to', replyTo);
-                }
-                if (index === chunkCount && bodyText) {
-                    formData.append('body', bodyText);
-                }
-                formData.append('file', chunk, file.name);
+            try {
+                for (let index = 1; index <= chunkCount; index++) {
+                    const chunk = file.slice((index - 1) * chunkSize, index * chunkSize);
+                    const formData = new FormData();
+                    formData.append('room_id', roomId);
+                    formData.append('msgtype', 'm.file');
+                    formData.append('upload_id', uploadId);
+                    formData.append('chunk_index', index);
+                    formData.append('chunk_count', chunkCount);
+                    formData.append('file_name', file.name);
+                    formData.append('file_size', file.size);
+                    if (replyTo) {
+                        formData.append('reply_to', replyTo);
+                    }
+                    if (index === chunkCount && bodyText) {
+                        formData.append('body', bodyText);
+                    }
+                    formData.append('file', chunk, file.name);
 
-                const res = await fetch('/api/v1/rooms/', {
-                    method: 'POST',
-                    headers: {
-                        "Authorization": "Bearer " + token
-                    },
-                    body: formData
-                });
+                    this.uploadProgress = Math.round((index / chunkCount) * 100);
 
-                const result = await res.json();
-                if (result.error) {
-                    notify(result.error, 'warning', 5000);
-                    throw new Error(result.error);
-                }
+                    const res = await fetch('/api/v1/rooms/', {
+                        method: 'POST',
+                        headers: {
+                            "Authorization": "Bearer " + token
+                        },
+                        body: formData
+                    });
 
-                if (result.status === 'error') {
-                    notify(result.error || 'Ошибка загрузки чанка', 'warning', 5000);
-                    throw new Error(result.error || 'Upload error');
+                    const result = await res.json();
+                    if (result.error) {
+                        notify(result.error, 'warning', 5000);
+                        throw new Error(result.error);
+                    }
+
+                    if (result.status === 'error') {
+                        notify(result.error || 'Ошибка загрузки чанка', 'warning', 5000);
+                        throw new Error(result.error || 'Upload error');
+                    }
                 }
+            } finally {
+                this.uploadProgress = null;
             }
         },
 
@@ -657,15 +699,7 @@ const app = Vue.createApp({
                 formData.append('file', file, file.name);
                 if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
 
-                const res = await fetch('/api/v1/rooms/', {
-                    method: 'POST',
-                    headers: {
-                        "Authorization": "Bearer " + token
-                    },
-                    body: formData
-                });
-
-                const result = await res.json();
+                const result = await this.uploadWithProgress(formData);
 
                 if (result.error) {
                     notify(result.error, 'warning', 5000);
@@ -696,15 +730,7 @@ const app = Vue.createApp({
                 formData.append('file', file, file.name);
                 if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
 
-                const res = await fetch('/api/v1/rooms/', {
-                    method: 'POST',
-                    headers: {
-                        "Authorization": "Bearer " + token
-                    },
-                    body: formData
-                });
-
-                const result = await res.json();
+                const result = await this.uploadWithProgress(formData);
 
                 if (result.error) {
                     notify(result.error, 'warning', 5000);
