@@ -54,7 +54,9 @@ const app = Vue.createApp({
             unreadCounts: {},
             prevRoomCounts: {},
             replyTo: null,
-            roomCreator: null
+            roomCreator: null,
+            syncFailed: false,
+            pendingScroll: false
         }
     },
 
@@ -213,10 +215,10 @@ const app = Vue.createApp({
             const el = this.$refs.messages;
             if (!el) return;
 
-            el.scrollTo({
-                top: el.scrollHeight,
-                behavior: smooth ? 'smooth' : 'auto'
-            });
+            el.scrollTop = el.scrollHeight;
+            if (smooth) {
+                el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+            }
         },
 
         scrollToMessage(eventId) {
@@ -239,15 +241,19 @@ const app = Vue.createApp({
             } catch (e) {
                 target.scrollIntoView(true);
             }
-            target.classList.add('msg-highlight');
-            setTimeout(() => target.classList.remove('msg-highlight'), 2000);
+            const bubble = target.querySelector('.msg-bubble');
+            if (bubble) {
+                bubble.classList.add('msg-highlight');
+                setTimeout(() => bubble.classList.remove('msg-highlight'), 2000);
+            }
         },
 
         /**
          * Обновляет отображаемый массив сообщений из кеша для активной комнаты.
          */
         updateMessages() {
-            const shouldScroll = this.isAtBottom();
+            const shouldScroll = this.pendingScroll || this.isAtBottom();
+            this.pendingScroll = false;
             
             if (!this.messagesStore[this.roomId]) {
                 this.messages = [];
@@ -272,12 +278,29 @@ const app = Vue.createApp({
         async sync() {
             const token = localStorage.getItem('token');
 
-            const res = await fetch('/api/v1/sync/?since=' + this.syncToken, {
-                headers: {
-                    "Authorization": "Bearer " + token,
-                    'Content-Type': 'application/json'
+            let res;
+            try {
+                res = await fetch('/api/v1/sync/?since=' + this.syncToken, {
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+            } catch (e) {
+                if (!this.syncFailed) {
+                    this.syncFailed = true;
+                    notify('Нет соединения с сервером', 'warning', 3000);
                 }
-            });
+                return;
+            }
+
+            if (!res.ok) {
+                if (!this.syncFailed) {
+                    this.syncFailed = true;
+                    notify('Ошибка сервера: ' + res.status, 'warning', 5000);
+                }
+                return;
+            }
 
             const data = await res.json();
             
@@ -287,6 +310,11 @@ const app = Vue.createApp({
                 sessionStorage.clear();
                 window.location.href = '/';
                 return;
+            }
+
+            if (this.syncFailed) {
+                this.syncFailed = false;
+                notify('Соединение восстановлено', 'success', 3000);
             }
             
             const rooms = data.rooms?.join || {};
@@ -358,6 +386,23 @@ const app = Vue.createApp({
 
             this.saveCache();
             this.updateMessages();
+            this.checkVersion();
+        },
+
+        async checkVersion() {
+            try {
+                const res = await fetch('/api/v1/version/', { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.hash) return;
+                if (!window.APP_HASH) {
+                    window.APP_HASH = data.hash;
+                } else if (data.hash !== window.APP_HASH) {
+                    location.reload();
+                }
+            } catch (e) {
+                // ignore
+            }
         },
 
         playNotificationSound() {
@@ -489,15 +534,16 @@ const app = Vue.createApp({
                 this.replyTo = null;
                 form.reset();
                 this.fileName = '';
-                this.$nextTick(() => {
-                    const bodyEl = form.querySelector('textarea[name="body"]');
-                    if (bodyEl) {
-                        bodyEl.style.height = 'auto';
-                        bodyEl.style.height = bodyEl.scrollHeight + 'px';
-                    }
-                });
-                return;
-            }
+            this.$nextTick(() => {
+                const bodyEl = form.querySelector('textarea[name="body"]');
+                if (bodyEl) {
+                    bodyEl.style.height = 'auto';
+                    bodyEl.style.height = bodyEl.scrollHeight + 'px';
+                }
+            });
+            this.pendingScroll = true;
+            return;
+        }
 
             const formData = new FormData(form);
             formData.delete('video_file');
@@ -532,6 +578,7 @@ const app = Vue.createApp({
                     bodyEl.style.height = bodyEl.scrollHeight + 'px';
                 }
             });
+            this.pendingScroll = true;
         },
 
         async uploadFileInChunks({form, token, file, bodyText, roomId, replyTo}) {
@@ -628,6 +675,7 @@ const app = Vue.createApp({
 
             this.replyTo = null;
             e.target.value = '';
+            this.pendingScroll = true;
         },
 
         async onAudioChange(e) {
@@ -666,6 +714,7 @@ const app = Vue.createApp({
 
             this.replyTo = null;
             e.target.value = '';
+            this.pendingScroll = true;
         },
 
         async startVoice() {
@@ -743,6 +792,7 @@ const app = Vue.createApp({
             this.voiceChunks = [];
             this.voiceSeconds = 0;
             this.replyTo = null;
+            this.pendingScroll = true;
         },
 
         formatVoiceTime(s) {
@@ -851,6 +901,22 @@ const app = Vue.createApp({
             const currentUser = localStorage.getItem('user_id');
             const sender = msg.json?.content?.sender || null;
             return currentUser && sender === currentUser;
+        },
+
+        isSameSender(index) {
+            if (index <= 0) return false;
+            const prev = this.messages[index - 1];
+            const curr = this.messages[index];
+            if (!prev || !curr) return false;
+            if (prev.type === 'm.room.member' || curr.type === 'm.room.member') return false;
+            const prevSender = prev.json?.content?.sender;
+            const currSender = curr.json?.content?.sender;
+            if (!prevSender || !currSender) return false;
+            if (prevSender !== currSender) return false;
+            const prevTs = this.msgTs(prev);
+            const currTs = this.msgTs(curr);
+            if (!prevTs || !currTs) return false;
+            return (currTs - prevTs) < 300000;
         },
 
         /**

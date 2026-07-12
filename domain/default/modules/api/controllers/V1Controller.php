@@ -663,4 +663,19 @@ class V1Controller extends \wco\kernel\Controller{
 
         return json_encode(['status' => 'ok', 'file_url' => $fileUrl]);
     }
+
+    /**
+     * Возвращает MD5-хеш файла rooms.js для контроля версий фронтенда.
+     * Используется для автообновления страницы при изменении кода.
+     * 
+     * @return bool
+     */
+    public function actionVersion() {
+        $jsPath = __DIR__ . '/../../../../../web/default/js/rooms.js';
+        $hash = file_exists($jsPath) ? md5_file($jsPath) : '';
+
+        header('Content-Type: application/json');
+        echo json_encode(['hash' => $hash]);
+        return true;
+    }
 }

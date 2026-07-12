@@ -82,74 +82,57 @@ $fInvite = new Form();
                 </div>
             </div>
 
-            <div class="messages" ref="messages">
-                <div class="list">
+            <div class="messages">
+                <div class="list" ref="messages">
                 <div v-for="(msg, index) in messages" :key="msg.event_id">
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
-                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
-                        <div class="msg-header">
-                            <div class="msg-author">
-                                <span class="msg-author-name">{{ msg.json.content.displayname || msg.json.sender }}</span>
-                            </div>
-                            <div class="msg-header-right">
-                                <div class="msg-time" v-if="formatTime(msg)">
-                                    {{ formatTime(msg) }}
-                                </div>
-                            </div>
-                        </div>
-                        <div class="msg-body">
-                            <div class="msg-join-text">присоединился к комнате</div>
+                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" class="msg-system">
+                        <span class="msg-system-text">{{ msg.json.content.displayname || msg.json.sender }} присоединился</span>
+                        <span class="msg-system-time">{{ formatTime(msg) }}</span>
+                    </div>
+                    <div v-else-if="msg.json?.content?.deleted" :data-event-id="msg.event_id" :class="['msg', 'msg-deleted-row', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                        <div class="msg-bubble msg-bubble-deleted">
+                            <span class="msg-deleted-text">Сообщение удалено</span>
                         </div>
                     </div>
                     <div v-else :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
-                        <div class="msg-header">
-                            <div class="msg-author" v-if="msg.json?.content?.sender">
-                                <img v-if="msg.json.content.avatar_url" :src="msg.json.content.avatar_url" class="msg-avatar" alt="" />
-                                <span class="msg-author-name">{{ msg.json.content.sender }}</span>
+                        <div v-if="!isSameSender(index) && !isOwnMessage(msg) && msg.json?.content?.sender" class="msg-sender-label">{{ msg.json.content.sender }}</div>
+                        <div class="msg-bubble" :class="{ 'msg-has-reply': msg.json?.content?.reply_to }">
+                            <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
+                                <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
+                                <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
                             </div>
-                            <div class="msg-header-right">
-                                <div class="msg-time" v-if="formatTime(msg)">
-                                    {{ formatTime(msg) }}
+                            <div v-if="msg.json?.content?.file_url">
+                                <div v-if="msg.json.content.file_type?.startsWith('image/')">
+                                    <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
                                 </div>
-                                <button v-if="!msg.json?.content?.deleted" class="btn-reply" @click="setReply(msg)" title="Ответить">↩</button>
-                                <button v-if="(isOwnMessage(msg) || isRoomOwner()) && !msg.json?.content?.deleted" class="btn-delete" @click="deleteMessage(msg.event_id)" title="Удалить">✕</button>
-                            </div>
-                        </div>
-                        <div class="msg-body">
-                            <div v-if="msg.json?.content?.deleted" class="msg-deleted">
-                                Сообщение удалено
-                            </div>
-                            <template v-else>
-                                <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
-                                    <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
-                                    <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
-                                </div>
-                                <div v-if="msg.json?.content?.file_url">
-                                    <div v-if="msg.json.content.file_type?.startsWith('image/')">
-                                        <img :src="msg.json.content.file_url" :alt="msg.json.content.file_name || 'Изображение'" class="chat-image" @click.prevent="viewImage(msg.json.content.file_url, msg.json.content.file_name)" />
-                                    </div>
-                                    <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
-                                        <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
-                                            <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
-                                            <div class="video-play-overlay">
-                                                <span class="video-play-icon">▶</span>
-                                            </div>
+                                <div v-else-if="isVideo(msg.json.content.file_type, msg.json.content.file_name)" class="video-wrap">
+                                    <div class="video-thumb" @click="viewVideo(msg.json.content.file_url, msg.json.content.file_name)">
+                                        <video :src="msg.json.content.file_url" class="chat-video" preload="metadata" @error="onVideoError($event, msg.json.content.file_url, msg.json.content.file_name)"></video>
+                                        <div class="video-play-overlay">
+                                            <span class="video-play-icon">▶</span>
                                         </div>
                                     </div>
-                                    <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
-                                        <span class="voice-label" v-if="msg.json.content.file_name?.startsWith('voice_')">🎤</span>
-                                        <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
-                                    </div>
-                                    <div v-else>
-                                        <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
-                                            {{ msg.json.content.file_name || 'Файл' }}
-                                        </a>
-                                    </div>
                                 </div>
-                                <div v-if="msg.json?.content?.body">
-                                    {{ msg.json.content.body }}
+                                <div v-else-if="isAudio(msg.json.content.file_type, msg.json.content.file_name)" class="audio-wrap">
+                                    <span class="voice-label" v-if="msg.json.content.file_name?.startsWith('voice_')">🎤</span>
+                                    <audio :src="msg.json.content.file_url" class="chat-audio" controls></audio>
                                 </div>
-                            </template>
+                                <div v-else class="msg-file-attach">
+                                    <a :href="msg.json.content.file_url" target="_blank" rel="noreferrer">
+                                        {{ msg.json.content.file_name || 'Файл' }}
+                                    </a>
+                                </div>
+                            </div>
+                            <div v-if="msg.json?.content?.body" class="msg-text">{{ msg.json.content.body }}</div>
+                            <div class="msg-meta">
+                                <span class="msg-time">{{ formatTime(msg) }}</span>
+                                <span v-if="isOwnMessage(msg)" class="msg-check">✓✓</span>
+                            </div>
+                        </div>
+                        <div class="msg-actions">
+                            <button v-if="!msg.json?.content?.deleted" class="btn-reply" @click="setReply(msg)" title="Ответить">↩</button>
+                            <button v-if="(isOwnMessage(msg) || isRoomOwner()) && !msg.json?.content?.deleted" class="btn-delete" @click="deleteMessage(msg.event_id)" title="Удалить">✕</button>
                         </div>
                     </div>
                 </div>
