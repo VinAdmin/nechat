@@ -17,7 +17,7 @@
     "repositories": [
     ],
     "require": {
-        "vinadmin/wco": "v0.2.2",
+        "vinadmin/wco": "^v1.0",
         "tracy/tracy": "v2.11.3",
         "robmorgan/phinx": "0.12.11",
         "firebase/php-jwt": "v7.0.5",
