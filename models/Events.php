@@ -10,7 +10,11 @@ use app\models\EventJson;
 use app\models\Rooms;
 
 /**
- * Description of Events
+ * Модель событий (events).
+ *
+ * Управляет созданием, получением и синхронизацией событий в комнатах.
+ * События представляют собой ключевые действия в системе: создание комнат,
+ * отправку сообщений (текст и файлы), приглашение пользователей и т.д.
  *
  * @author Olkhin Vitaliy <ovvitalik@gmail.com>
  * @copyright (c) 2026, Olkhin Vitaliy
@@ -31,6 +35,7 @@ class Events extends DB{
      * @return string
      */
     public function addEvent($params): string {
+        // Генерируем уникальный ID события по формату Matrix ($$uuid)
         $uuid = Uuid::uuid4()->toString();
         $eventId = "$$uuid";
         
@@ -39,13 +44,24 @@ class Events extends DB{
             'type'        => $params['type'],
             'room_id'     => $params['room_id'],
             'sender'      => $params['sender'],
-            'received_ts' => time()
+            'received_ts' => time()  // Время получения события (Unix-timestamp)
         ]);
         
         return $eventId;
     }
     
+    /**
+     * Создаёт сообщение (текст или файл) в комнате.
+     *
+     * Поддерживает отправку текстовых сообщений (m.text) и файлов (m.file).
+     * Файлы загружаются посредством chunk-загрузки для больших файлов.
+     * Проверяет права отправки: забаненные и приглашённые пользователи не могут писать.
+     *
+     * @param string $sender user_id отправителя
+     * @return string JSON с event_id или сообщение об ошибке
+     */
     public function create($sender) {
+        // Парсим тело запроса: сначала пытаемся JSON, затем fallback на $_POST
         $data = json_decode(file_get_contents("php://input"), true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
             $data = $_POST;
@@ -56,6 +72,7 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
         
+        // Получаем комнату и проверяем её существование
         $room_id = strip_tags($data['room_id']);
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($room_id);
@@ -65,6 +82,7 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
 
+        // Тип сообщения: m.text (текст) или m.file (файл)
         $type = isset($data['msgtype']) ? strip_tags($data['msgtype']) : 'm.text';
         $body = isset($data['body']) ? strip_tags($data['body']) : '';
         $replyTo = isset($data['reply_to']) ? strip_tags($data['reply_to']) : '';
@@ -73,11 +91,13 @@ class Events extends DB{
         $fileType = null;
         $fileSize = null;
 
+        // Директория для загрузки файлов
         $uploadDir = __DIR__ . '/../data/uploads';
         if (!is_dir($uploadDir)) {
             mkdir($uploadDir, 0755, true);
         }
 
+        // Таблицы соответствия расширений MIME-типам для определения типа загружаемого файла
         $videoExts = ['mp4', 'webm', 'ogg', 'mkv', 'avi', 'mov', 'flv', 'wmv', '3gp'];
         $videoMimes = [
             'mp4' => 'video/mp4', 'webm' => 'video/webm', 'ogg' => 'video/ogg',
@@ -98,27 +118,33 @@ class Events extends DB{
             'avif' => 'image/avif'
         ];
 
+        // Параметры chunk-загрузки (для больших файлов разбивается на части)
         $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;
         $chunkIndex = isset($data['chunk_index']) ? (int)$data['chunk_index'] : 0;
         $uploadId = isset($data['upload_id']) ? strip_tags($data['upload_id']) : null;
         $fileSize = isset($data['file_size']) ? (int)$data['file_size'] : null;
 
+        // Обработка загрузки файла
         if ($type === 'm.file' && !empty($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
             $fileInfo = $_FILES['file'];
             $tempDir = $uploadDir . '/tmp';
+            // Безопасное имя директории для чанков (только буквы, цифры, дефисы, подчёркивания)
             $chunkDir = $tempDir . '/' . preg_replace('/[^A-Za-z0-9_-]/', '', $uploadId);
 
+            // Многочастичная загрузка: файл разбит на несколько чанков
             if ($chunkCount > 1 && $chunkIndex > 0 && $uploadId) {
                 if (!is_dir($chunkDir)) {
                     mkdir($chunkDir, 0755, true);
                 }
 
+                // Сохраняем текущий чанк во временную директорию
                 $chunkFile = $chunkDir . '/chunk_' . $chunkIndex;
                 if (!move_uploaded_file($fileInfo['tmp_name'], $chunkFile)) {
                     http_response_code(500);
                     return json_encode(["error" => "Upload failed"]);
                 }
 
+                // Если ещё не все чанки получены — возвращаем статус ожидания
                 if ($chunkIndex < $chunkCount) {
                     return json_encode([
                         'status' => 'chunk_received',
@@ -127,6 +153,7 @@ class Events extends DB{
                     ]);
                 }
 
+                // Все чанки получены — собираем файл из частей
                 $fileName = isset($data['file_name']) ? basename(strip_tags($data['file_name'])) : basename($fileInfo['name']);
                 $safeName = preg_replace('/[^A-Za-z0-9_\-.]/', '_', $fileName);
                 $uniqueName = time() . '_' . bin2hex(random_bytes(8)) . '_' . $safeName;
@@ -138,6 +165,7 @@ class Events extends DB{
                     return json_encode(["error" => "Unable to write file"]);
                 }
 
+                // Склеиваем все чанки в один файл последовательно
                 for ($i = 1; $i <= $chunkCount; $i++) {
                     $partPath = $chunkDir . '/chunk_' . $i;
                     if (!is_file($partPath)) {
@@ -153,18 +181,21 @@ class Events extends DB{
                         return json_encode(["error" => "Unable to read chunk {$i}"]);
                     }
 
+                    // Читаем по 1 МБ для эффективного копирования
                     while (!feof($in)) {
                         $buffer = fread($in, 1048576);
                         fwrite($out, $buffer);
                     }
                     fclose($in);
-                    unlink($partPath);
+                    unlink($partPath);  // Удаляем временный чанк после записи
                 }
 
                 fclose($out);
-                @rmdir($chunkDir);
+                @rmdir($chunkDir);  // Удаляем временную директорию чанков
                 $fileUrl = '/f/' . $uniqueName;
                 $fileType = $fileInfo['type'];
+
+                // Если сервер не определил MIME-тип — определяем по расширению
                 $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 if ($fileType === 'application/octet-stream') {
                     if (isset($imageMimes[$fileExt])) {
@@ -179,13 +210,15 @@ class Events extends DB{
                     $fileSize = filesize($destination);
                 }
                 if (empty($body)) {
-                    $body = $fileName;
+                    $body = $fileName;  // Имя файла как текст сообщения по умолчанию
                 }
 
+                // Если тип был m.text, меняем на m.file (файл прикреплён)
                 if ($type === 'm.text') {
                     $type = 'm.file';
                 }
             } else {
+                // Обычная (одноразовая) загрузка файла без чанков
                 $fileName = basename($fileInfo['name']);
                 $safeName = preg_replace('/[^A-Za-z0-9_\-.]/', '_', $fileName);
                 $uniqueName = time() . '_' . bin2hex(random_bytes(8)) . '_' . $safeName;
@@ -198,6 +231,8 @@ class Events extends DB{
 
                 $fileUrl = '/f/' . $uniqueName;
                 $fileType = $fileInfo['type'];
+
+                // Определяем MIME-тип по расширению, если сервер вернул application/octet-stream
                 $fileExt = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
                 if ($fileType === 'application/octet-stream') {
                     if (isset($imageMimes[$fileExt])) {
@@ -222,12 +257,14 @@ class Events extends DB{
             }
         }
 
+        // Проверка прав на отправку сообщений
         if ($type === 'm.text') {
             if (empty($body)) {
                 http_response_code(401);
                 return json_encode(["error" => "Body error"]);
             }
 
+            // Запрещаем отправку забаненным и приглашённым (не вступившим) пользователям
             $modelRoomMemberships = new RoomMemberships();
             $modelRoomMemberships->select()->from()
                     ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
@@ -245,6 +282,7 @@ class Events extends DB{
                 return json_encode(["error" => "File upload error"]);
             }
 
+            // Та же проверка прав для файловых сообщений
             $modelRoomMemberships = new RoomMemberships();
             $modelRoomMemberships->select()->from()
                     ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
@@ -258,12 +296,14 @@ class Events extends DB{
             }
         }
 
+        // Создаём запись события в БД
         $eventId = $this->addEvent([
             'type'    => $type,
             'room_id' => $room['room_id'],
             'sender'  => $sender,
         ]);
 
+        // Получаем данные отправителя (аватар и т.д.)
         $mUsers = new Users();
         $user = $mUsers->getUserById($sender);
 
@@ -274,6 +314,7 @@ class Events extends DB{
             'avatar_url' => $user['avatar_url'] ?? ''
         ];
 
+        // Если это ответ на другое сообщение — добавляем информацию о оригинале
         if ($replyTo) {
             $replyToData = ['event_id' => $replyTo];
             $sql = "SELECT json FROM event_json WHERE event_id = :eid AND room_id = :rid LIMIT 1";
@@ -289,6 +330,7 @@ class Events extends DB{
             $content['reply_to'] = $replyToData;
         }
 
+        // Добавляем метаданные файла в контент, если это файловое сообщение
         if ($fileUrl) {
             $content['file_url'] = $fileUrl;
             $content['file_name'] = $fileName;
@@ -296,16 +338,18 @@ class Events extends DB{
             $content['file_size'] = $fileSize;
         }
 
+        // Собираем JSON события по формату Matrix
         $json = json_encode([
             'event_id' => $eventId,
             'type'     => $type,
             'room_id'  => $room['room_id'],
             'sender'   => $sender,
-            'origin_server_ts' => round(microtime(true) * 1000),
+            'origin_server_ts' => round(microtime(true) * 1000),  // Временная метка в миллисекундах
             'content' => $content
         ]);
         
-        $mEventJson = new EventJson();  //Сохранение информациио событии
+        // Сохраняем JSON представление события
+        $mEventJson = new EventJson();
         $mEventJson->add([
             'event_id' => $eventId,
             'room_id'  => $room['room_id'],
@@ -325,6 +369,7 @@ class Events extends DB{
      * @return string Список событий
      */
     public function sync(string $sender): string {
+        // Параметр since — временная метка для инкрементальной синхронизации
         $since = filter_input(INPUT_GET, 'since', FILTER_VALIDATE_INT);
 
         if ($since === false) {
@@ -334,11 +379,13 @@ class Events extends DB{
         $mEventJson = new EventJson();
         $mRoomMemberships = new RoomMemberships();
         
+        // Получаем события из комнат, где пользователь является участником (join/invite)
         $sql = $this->select("t1.event_id, t1.type, t1.room_id, t1.sender, t1.received_ts, ej.json, m.membership")->from();
         $sql->joinInner(['ej' => $mEventJson->init()], "ej.event_id = t1.event_id");
         $sql->joinInner(['m' => $mRoomMemberships->init()], "m.room_id = t1.room_id AND m.user_id = :sender AND m.membership IN ('join','invite')");
         
         $params = ['sender' => $sender];
+        // Если указан since — возвращаем только события новее этой метки
         if($since !== null){
             $sql->where("t1.received_ts > :since");
             $params['since'] = $since;
@@ -351,8 +398,9 @@ class Events extends DB{
         $arr = [];
         $arr['next_batch'] = 0;
         
+        // Группируем события по типу членства: invite и join попадают в разные массивы
         foreach ($result as $key => $event){
-            if($event['membership'] === 'invite'){                          // Если это приглашение, то добавляем в массив invite
+            if($event['membership'] === 'invite'){
                 $arr['rooms']['invite'][$event['room_id']] = [
                     'invite_state' => [
                         'events' => []
@@ -360,7 +408,7 @@ class Events extends DB{
                 ];
             }
 
-            if($event['membership'] === 'join'){                            // Если это присоединение, то добавляем в массив join
+            if($event['membership'] === 'join'){
                 $arr['rooms']['join'][$event['room_id']]['events'][] = [
                     'event_id'   => $event['event_id'],
                     'type'       => $event['type'],
@@ -369,7 +417,8 @@ class Events extends DB{
                 ];
             }
 
-            if($arr['next_batch'] < $event['received_ts']){                 // Если текущий next_batch меньше, чем received_ts события, то обновляем next_batch
+            // Обновляем next_batch — максимальная временная метка для следующей синхронизации
+            if($arr['next_batch'] < $event['received_ts']){
                 $arr['next_batch'] = $event['received_ts'];
             }
         }
@@ -378,18 +427,31 @@ class Events extends DB{
     }
     
     /**
-     * @param string $roomId
-     * @param string $userId
-     * @param string $sender
-     * @param string $membership По умолчанию invite
-     * @return bool
+     * Приглашает пользователя в комнату (или изменяет его статус членства).
+     *
+     * Создаёт событие m.room.member и запись членства в room_memberships.
+     * Если пользователь уже состоит в комнате (не забанен) — возвращает false.
+     *
+     * @param string $roomId    ID комнаты
+     * @param string $userId    ID приглашаемого пользователя
+     * @param string $sender    ID отправителя приглашения
+     * @param string $membership Тип членства (по умолчанию 'invite')
+     * @return bool true при успехе, false если пользователь уже в комнате
      */
     public function invite(string $roomId, string $userId, string $sender, string $membership = 'invite'): bool {
         $mRoomMemberships = new RoomMemberships();
         $member = $mRoomMemberships->getRoomMember($roomId, $userId);
         
+        // Если пользователь уже состоит в комнате (и не забанен) — отклоняем приглашение
+        if(isset($member['user_id']) && $member['membership'] !== 'ban'){
+            http_response_code(400);
+            echo json_encode(["error" => "User is already in this room"]);
+            return false;
+        }
+
         $type = 'm.room.member';
 
+        // Создаём событие m.room.member (приглашение/бан/вступление)
         $eventId = $this->addEvent([
             'type'    => $type,
             'room_id' => $roomId,
@@ -398,6 +460,7 @@ class Events extends DB{
 
         $mEventJson = new EventJson();
         
+        // Извлекаем отображаемое имя из user_id (убираем @ и :domain)
         $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $userId);
 
         $json = json_encode([
@@ -409,12 +472,14 @@ class Events extends DB{
             ]
         ]);
 
+        // Сохраняем JSON представление события
         $mEventJson->add([
             'event_id' => $eventId,
             'room_id'  => $roomId,
             'json'     => $json
         ]);
 
+        // Создаём/обновляем запись о членстве пользователя в комнате
         $mRoomMemberships->addUser([
             'event_id'   => $eventId,
             'user_id'    => $userId,
