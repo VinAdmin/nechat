@@ -32,6 +32,10 @@ class RoomMemberships extends DB{
      * @return array Возвращаем пустой массив (плейсхолдер)
      */
     public function addUser(array $col): array{
+        $existing = $this->getRoomMember($col['room_id'], $col['user_id']);
+        if(!empty($existing)){
+            return [];
+        }
         $this->insert($col);
         return [];
     }
