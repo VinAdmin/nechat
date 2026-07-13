@@ -211,6 +211,35 @@ $fInvite = new Form();
                             </div>
                         </div>
                     </div>
+                    <!-- File preview panel (Telegram-style) -->
+                    <div v-if="pendingFile" class="file-preview-panel">
+                        <div class="file-preview-body">
+                            <template v-if="pendingFile.type === 'image'">
+                                <img :src="pendingFile.preview" class="file-preview-thumb" />
+                            </template>
+                            <template v-else-if="pendingFile.type === 'video'">
+                                <video :src="pendingFile.preview" class="file-preview-thumb file-preview-video" muted></video>
+                            </template>
+                            <template v-else-if="pendingFile.type === 'audio'">
+                                <div class="file-preview-icon">🎵</div>
+                            </template>
+                            <template v-else>
+                                <div class="file-preview-icon">📄</div>
+                            </template>
+                            <div class="file-preview-info">
+                                <div class="file-preview-name" :title="pendingFile.file.name">{{ pendingFile.file.name }}</div>
+                                <div class="file-preview-size">{{ formatFileSize(pendingFile.file.size) }}</div>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-send-file" @click="sendPendingFile" title="Отправить" :disabled="uploadProgress !== null">
+                                <span v-if="uploadProgress !== null" class="spinner-border spinner-border-sm"></span>
+                                <span v-else>➤</span>
+                            </button>
+                            <button type="button" class="file-preview-remove" @click="cancelPendingFile" title="Удалить">✕</button>
+                        </div>
+                        <div v-if="uploadProgress !== null" class="file-preview-progress">
+                            <div class="file-preview-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
+                        </div>
+                    </div>
                     <div v-if="editingMessage" class="composer-input-row">
                         <textarea id="editInput" v-model="editBody" class="msgInput edit-input" placeholder="Введите новый текст..." rows="1" @keydown="onEditKeydown" @input="$event.target.style.height='auto'; $event.target.style.height=$event.target.scrollHeight+'px'"></textarea>
                         <button type="button" class="btn btn-warning" @click="saveEdit">✔</button>
@@ -223,61 +252,47 @@ $fInvite = new Form();
                         ])->Field()?>
                     </div>
                 <div class="composer-actions">
-                    <div v-if="uploadProgress !== null" class="upload-progress-bar">
-                        <div class="upload-progress-track">
-                            <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
-                        </div>
-                        <span class="upload-progress-text">{{ uploadProgress }}%</span>
-                    </div>
-                    <div>
-                        <button type="button" class="btn btn-outline-secondary file-upload-button" @click="toggleEmoji" title="Эмодзи">
-                            <span>😊</span>
-                        </button>
-                    </div>
+                    <button type="button" class="btn btn-outline-secondary file-upload-button" @click="toggleEmoji" title="Эмодзи">
+                        <span>😊</span>
+                    </button>
                     <div class="file-upload-wrapper">
                         <input type="file" name="file" id="file" class="file-input" @change="onFileChange" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
                         <label for="file" class="btn btn-outline-secondary file-upload-button" title="Прикрепить файл">
                             <span>📎</span>
                         </label>
-                        <span class="file-upload-name" v-if="fileName">{{ fileName }}</span>
                     </div>
-                    <div>
-                        <input type="file" name="video_file" id="video" class="file-input" accept="video/*" @change="onVideoChange" />
-                        <label for="video" class="btn btn-outline-secondary file-upload-button" title="Видео">
-                            <span>🎬</span>
-                        </label>
-                    </div>
-                    <div>
-                        <input type="file" name="audio_file" id="audio" class="file-input" accept="audio/*" @change="onAudioChange" />
-                        <label for="audio" class="btn btn-outline-secondary file-upload-button" title="Аудио">
-                            <span>🎵</span>
-                        </label>
-                    </div>
-                    <div>
-                        <template v-if="!voiceRecording && !voiceBlob">
-                            <button type="button" class="btn btn-outline-secondary file-upload-button" @click="startVoice" title="Голосовое сообщение">
-                                <span>🎤</span>
-                            </button>
-                        </template>
-                        <template v-else-if="voiceRecording">
-                            <button type="button" class="btn btn-danger file-upload-button" @click="stopVoice" title="Остановить запись">
-                                <span>⏹</span>
-                            </button>
-                            <span class="voice-timer ms-1">{{ formatVoiceTime(voiceSeconds) }}</span>
-                        </template>
-                        <template v-else-if="voiceBlob && !voiceRecording">
-                            <button type="button" class="btn btn-success file-upload-button" @click="sendVoice" title="Отправить">
-                                <span>➤</span>
-                            </button>
-                            <button type="button" class="btn btn-outline-secondary file-upload-button" @click="cancelVoice" title="Отмена">
-                                <span>✕</span>
-                            </button>
-                        </template>
-                    </div>
+                    <label for="video" class="btn btn-outline-secondary file-upload-button" title="Видео">
+                        <span>🎬</span>
+                    </label>
+                    <label for="audio" class="btn btn-outline-secondary file-upload-button" title="Аудио">
+                        <span>🎵</span>
+                    </label>
+                    <template v-if="!voiceRecording && !voiceBlob">
+                        <button type="button" class="btn btn-outline-secondary file-upload-button" @click="startVoice" title="Голосовое сообщение">
+                            <span>🎤</span>
+                        </button>
+                    </template>
+                    <template v-else-if="voiceRecording">
+                        <button type="button" class="btn btn-danger file-upload-button" @click="stopVoice" title="Остановить запись">
+                            <span>⏹</span>
+                        </button>
+                        <span class="voice-timer ms-1">{{ formatVoiceTime(voiceSeconds) }}</span>
+                    </template>
+                    <template v-else-if="voiceBlob && !voiceRecording">
+                        <button type="button" class="btn btn-success file-upload-button" @click="sendVoice" title="Отправить">
+                            <span>➤</span>
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary file-upload-button" @click="cancelVoice" title="Отмена">
+                            <span>✕</span>
+                        </button>
+                    </template>
                 </div>
             </div>
             <?=$fMessages->FormEnd();?>
         </div>
+
+        <input type="file" id="video" class="file-input" accept="video/*" @change="onVideoChange" />
+        <input type="file" id="audio" class="file-input" accept="audio/*" @change="onAudioChange" />
 
     </div>
     </div>
@@ -548,6 +563,29 @@ $fInvite = new Form();
                 </div>
                 <div class="modal-body d-flex justify-content-center align-items-center p-0">
                     <video :src="previewVideo" class="video-preview" controls autoplay></video>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="videoSendModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">Отправить видео</h5>
+                    <button type="button" class="btn-close btn-close-white" @click="closeVideoSendModal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="video-send-preview">
+                        <video :src="videoSendPreview" class="video-preview" controls></video>
+                    </div>
+                    <div class="video-send-caption">
+                        <input type="text" class="form-control bg-dark text-white border-secondary" v-model="videoSendCaption" placeholder="Подпись..." @keydown.enter.prevent="sendVideoFromModal" />
+                        <button type="button" class="btn btn-primary btn-send-file" @click="sendVideoFromModal" :disabled="videoSending || !videoSendFile">
+                            <span v-if="videoSending" class="spinner-border spinner-border-sm"></span>
+                            <span v-else>➤</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

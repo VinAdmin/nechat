@@ -29,6 +29,10 @@ const app = Vue.createApp({
             previewImageName: '',
             previewVideo: '',
             previewVideoName: '',
+            videoSendFile: null,
+            videoSendPreview: '',
+            videoSendCaption: '',
+            videoSending: false,
             settingsName: '',
             settingsTopic: '',
             settingsAvatar: '',
@@ -58,6 +62,7 @@ const app = Vue.createApp({
             syncFailed: false,
             pendingScroll: false,
             uploadProgress: null,
+            pendingFile: null,
             onlineUsers: [],
             typingUsers: [],
             typingTimer: null,
@@ -562,81 +567,82 @@ const app = Vue.createApp({
             });
         },
 
-        async sendMessage(e) {
+        sendMessage(e) {
             e.preventDefault();
 
             const form = e.target;
             const token = localStorage.getItem('token');
-            const fileInput = form.querySelector('input[name="file"]');
-            const videoInput = form.querySelector('input[name="video_file"]');
-            const file = fileInput?.files?.[0] || videoInput?.files?.[0];
             const bodyText = form.querySelector('textarea[name="body"], input[name="body"]')?.value || '';
+            const replyTo = this.replyTo?.event_id || null;
 
-            if (!file && !bodyText.trim()) {
-                notify('Введите сообщение или выберите файл', 'warning', 4000);
+            if (!bodyText.trim()) {
+                notify('Введите сообщение', 'warning', 4000);
                 return;
             }
 
-            if (file && file.size > 1 * 1024 * 1024) {
-                const opts = { form, token, file, bodyText, roomId: this.roomId };
-                if (this.replyTo) opts.replyTo = this.replyTo.event_id;
-                await this.uploadFileInChunks(opts);
-                this.replyTo = null;
-                form.reset();
-                this.fileName = '';
-            this.$nextTick(() => {
-                const bodyEl = form.querySelector('textarea[name="body"]');
-                if (bodyEl) {
-                    bodyEl.style.height = 'auto';
-                    bodyEl.style.height = bodyEl.scrollHeight + 'px';
-                }
-            });
-            this.pendingScroll = true;
-            return;
-        }
-
-            const formData = new FormData(form);
-            formData.delete('video_file');
-            formData.set('room_id', this.roomId);
-            formData.set('msgtype', file ? 'm.file' : 'm.text');
-            if (this.replyTo) formData.set('reply_to', this.replyTo.event_id);
-
-            if (file && !formData.has('file')) {
-                formData.append('file', file, file.name);
-            }
-
-            const hasFile = !!file;
-            let result;
-            if (hasFile) {
-                result = await this.uploadWithProgress(formData);
-            } else {
-                const res = await fetch('/api/v1/rooms/', {
-                    method: 'POST',
-                    headers: { "Authorization": "Bearer " + token },
-                    body: formData
-                });
-                result = await res.json();
-            }
-
-            if (result.error) {
-                notify(result.error, 'warning', 5000);
-                return;
-            }
-
-            form.reset();
-            this.fileName = '';
             this.replyTo = null;
-            this.$nextTick(() => {
-                const bodyEl = form.querySelector('textarea[name="body"]');
-                if (bodyEl) {
-                    bodyEl.style.height = 'auto';
-                    bodyEl.style.height = bodyEl.scrollHeight + 'px';
+
+            const formData = new FormData();
+            formData.set('room_id', this.roomId);
+            formData.set('msgtype', 'm.text');
+            formData.set('body', bodyText);
+            if (replyTo) formData.set('reply_to', replyTo);
+
+            this.resetForm(form);
+
+            fetch('/api/v1/rooms/', {
+                method: 'POST',
+                headers: { "Authorization": "Bearer " + token },
+                body: formData
+            }).then(res => res.json()).then(result => {
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
                 }
-            });
-            this.pendingScroll = true;
+                this.pendingScroll = true;
+            }).catch(() => {});
         },
 
-        async uploadFileInChunks({form, token, file, bodyText, roomId, replyTo}) {
+        sendPendingFile() {
+            const file = this.pendingFile?.file;
+            if (!file) return;
+
+            const token = localStorage.getItem('token');
+            const bodyText = this.$refs.bodyInput?.value || '';
+            const replyTo = this.replyTo?.event_id || null;
+            this.replyTo = null;
+
+            if (file.size > 1 * 1024 * 1024) {
+                const opts = { token, file, bodyText, roomId: this.roomId, replyTo };
+                this.uploadFileInChunks(opts).then(() => {
+                    this.cancelPendingFile();
+                    this.pendingScroll = true;
+                }).catch(() => {});
+            } else {
+                const formData = new FormData();
+                formData.append('room_id', this.roomId);
+                formData.append('msgtype', 'm.file');
+                formData.append('file', file, file.name);
+                if (bodyText) formData.append('body', bodyText);
+                if (replyTo) formData.append('reply_to', replyTo);
+
+                this.uploadWithProgress(formData).then(() => {
+                    this.cancelPendingFile();
+                    this.pendingScroll = true;
+                }).catch(() => {});
+            }
+        },
+
+        resetForm(form) {
+            this.replyTo = null;
+            this.fileName = '';
+            const bodyEl = form.querySelector('textarea[name="body"]');
+            if (bodyEl) {
+                bodyEl.value = '';
+                bodyEl.style.height = 'auto';
+            }
+        },
+
+        async uploadFileInChunks({token, file, bodyText, roomId, replyTo}) {
             const chunkSize = 1 * 1024 * 1024; // 1 MB
             const chunkCount = Math.ceil(file.size / chunkSize);
             const uploadId = `${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -687,12 +693,50 @@ const app = Vue.createApp({
         },
 
         /**
-         * Обновляет название выбранного файла в интерфейсе.
+         * Sets pendingFile for preview panel.
          * @param {Event} e
          */
         onFileChange(e) {
             const file = e.target.files?.[0];
-            this.fileName = file ? file.name : '';
+            if (!file) return;
+            e.target.value = '';
+            this.setPendingFile(file);
+        },
+
+        /**
+         * Attaches a file object to pendingFile for preview.
+         * @param {File} file
+         */
+        setPendingFile(file) {
+            if (this.pendingFile?.preview) URL.revokeObjectURL(this.pendingFile.preview);
+            let type = 'file';
+            if (file.type.startsWith('image/')) type = 'image';
+            else if (file.type.startsWith('video/')) type = 'video';
+            else if (file.type.startsWith('audio/')) type = 'audio';
+            this.pendingFile = {
+                file,
+                preview: (type === 'image' || type === 'video') ? URL.createObjectURL(file) : null,
+                type
+            };
+        },
+
+        /**
+         * Clears pendingFile.
+         */
+        cancelPendingFile() {
+            if (this.pendingFile?.preview) URL.revokeObjectURL(this.pendingFile.preview);
+            this.pendingFile = null;
+        },
+
+        /**
+         * Formats bytes to human-readable string.
+         * @param {number} bytes
+         * @returns {string}
+         */
+        formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' Б';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' КБ';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
         },
 
         /**
@@ -700,66 +744,65 @@ const app = Vue.createApp({
          * @param {Event} e
          * @returns {Promise<void>}
          */
-        async onVideoChange(e) {
+        onVideoChange(e) {
             const file = e.target.files?.[0];
             if (!file) return;
-
-            const form = document.getElementById('sendMessage');
-            const token = localStorage.getItem('token');
-
-            if (file.size > 1 * 1024 * 1024) {
-                const opts = { form, token, file, bodyText: file.name, roomId: this.roomId };
-                if (this.replyTo) opts.replyTo = this.replyTo.event_id;
-                await this.uploadFileInChunks(opts);
-            } else {
-                const formData = new FormData();
-                formData.append('room_id', this.roomId);
-                formData.append('msgtype', 'm.file');
-                formData.append('file', file, file.name);
-                if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
-
-                const result = await this.uploadWithProgress(formData);
-
-                if (result.error) {
-                    notify(result.error, 'warning', 5000);
-                    return;
-                }
-            }
-
-            this.replyTo = null;
             e.target.value = '';
-            this.pendingScroll = true;
+            this.videoSendFile = file;
+            this.videoSendPreview = URL.createObjectURL(file);
+            this.videoSendCaption = '';
+            this.videoSending = false;
+            const modal = new bootstrap.Modal(document.getElementById('videoSendModal'));
+            modal.show();
         },
 
-        async onAudioChange(e) {
+        sendVideoFromModal() {
+            if (!this.videoSendFile || this.videoSending) return;
+            this.videoSending = true;
+            const token = localStorage.getItem('token');
+            const file = this.videoSendFile;
+            const bodyText = this.videoSendCaption;
+            const replyTo = this.replyTo?.event_id || null;
+            this.replyTo = null;
+
+            const doUpload = () => {
+                if (file.size > 1 * 1024 * 1024) {
+                    const opts = { token, file, bodyText, roomId: this.roomId, replyTo };
+                    return this.uploadFileInChunks(opts);
+                } else {
+                    const formData = new FormData();
+                    formData.append('room_id', this.roomId);
+                    formData.append('msgtype', 'm.file');
+                    formData.append('file', file, file.name);
+                    if (bodyText) formData.append('body', bodyText);
+                    if (replyTo) formData.append('reply_to', replyTo);
+                    return this.uploadWithProgress(formData);
+                }
+            };
+
+            doUpload().then(() => {
+                this.closeVideoSendModal();
+                this.pendingScroll = true;
+            }).catch(() => {
+                this.videoSending = false;
+            });
+        },
+
+        closeVideoSendModal() {
+            if (this.videoSendPreview) URL.revokeObjectURL(this.videoSendPreview);
+            this.videoSendFile = null;
+            this.videoSendPreview = '';
+            this.videoSendCaption = '';
+            this.videoSending = false;
+            const modal = bootstrap.Modal.getInstance(document.getElementById('videoSendModal'));
+            if (modal) modal.hide();
+        },
+
+        onAudioChange(e) {
             const file = e.target.files?.[0];
             if (!file) return;
-
-            const form = document.getElementById('sendMessage');
-            const token = localStorage.getItem('token');
-
-            if (file.size > 1 * 1024 * 1024) {
-                const opts = { form, token, file, bodyText: file.name, roomId: this.roomId };
-                if (this.replyTo) opts.replyTo = this.replyTo.event_id;
-                await this.uploadFileInChunks(opts);
-            } else {
-                const formData = new FormData();
-                formData.append('room_id', this.roomId);
-                formData.append('msgtype', 'm.file');
-                formData.append('file', file, file.name);
-                if (this.replyTo) formData.append('reply_to', this.replyTo.event_id);
-
-                const result = await this.uploadWithProgress(formData);
-
-                if (result.error) {
-                    notify(result.error, 'warning', 5000);
-                    return;
-                }
-            }
-
-            this.replyTo = null;
             e.target.value = '';
-            this.pendingScroll = true;
+            this.setPendingFile(file);
         },
 
         async startVoice() {
@@ -1894,14 +1937,21 @@ const app = Vue.createApp({
         document.getElementById('formInvite')
             .addEventListener('submit', this.invite);
 
-        const modalEl = document.getElementById('videoPreviewModal');
-        if (modalEl) {
-            modalEl.addEventListener('hidden.bs.modal', () => {
-                const video = modalEl.querySelector('video');
+        const videoViewerModal = document.getElementById('videoPreviewModal');
+        if (videoViewerModal) {
+            videoViewerModal.addEventListener('hidden.bs.modal', () => {
+                const video = videoViewerModal.querySelector('video');
                 if (video) {
                     video.pause();
                     video.currentTime = 0;
                 }
+            });
+        }
+
+        const modalEl = document.getElementById('videoSendModal');
+        if (modalEl) {
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                this.closeVideoSendModal();
             });
         }
 
