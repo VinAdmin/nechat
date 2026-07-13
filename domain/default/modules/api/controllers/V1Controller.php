@@ -617,6 +617,7 @@ class V1Controller extends \wco\kernel\Controller{
             return json_encode(['error' => 'Only the author or room owner can delete the message']);
         }
 
+        $fileToDelete = null;
         $mEventJson = new EventJson();
         $mEventJson->select()->from()->where("event_id = :event_id AND room_id = :room_id");
         $ej = $mEventJson->fetch([
@@ -627,10 +628,7 @@ class V1Controller extends \wco\kernel\Controller{
         if(isset($ej['event_id'])){
             $ejData = json_decode($ej['json'], true);
             if(isset($ejData['content']['file_url'])){
-                $filePath = __DIR__ . '/../../../../../data/uploads/' . basename($ejData['content']['file_url']);
-                if(is_file($filePath)){
-                    unlink($filePath);
-                }
+                $fileToDelete = __DIR__ . '/../../../../../data/uploads/' . basename($ejData['content']['file_url']);
             }
         }
 
@@ -651,12 +649,17 @@ class V1Controller extends \wco\kernel\Controller{
             ]
         ]);
 
-        $mEventJson = new EventJson();
         $mEventJson->add([
             'event_id' => $redactEventId,
             'room_id'  => $params['roomId'],
             'json'     => $json
         ]);
+
+        if($fileToDelete && is_file($fileToDelete)){
+            register_shutdown_function(function() use ($fileToDelete) {
+                @unlink($fileToDelete);
+            });
+        }
 
         return json_encode(['status' => 'ok']);
     }
