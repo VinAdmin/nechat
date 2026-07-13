@@ -655,13 +655,22 @@ class V1Controller extends \wco\kernel\Controller{
             'json'     => $json
         ]);
 
-        if($fileToDelete && is_file($fileToDelete)){
-            register_shutdown_function(function() use ($fileToDelete) {
-                @unlink($fileToDelete);
-            });
+        $response = json_encode(['status' => 'ok']);
+        echo $response;
+
+        if(function_exists('fastcgi_finish_request')){
+            fastcgi_finish_request();
+        } else {
+            header('Content-Length: ' . strlen($response));
+            while(ob_get_level()){ ob_end_flush(); }
+            flush();
         }
 
-        return json_encode(['status' => 'ok']);
+        if($fileToDelete && is_file($fileToDelete)){
+            @unlink($fileToDelete);
+        }
+
+        return '';
     }
 
     /**
