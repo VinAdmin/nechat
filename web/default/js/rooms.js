@@ -57,7 +57,26 @@ const app = Vue.createApp({
             roomCreator: null,
             syncFailed: false,
             pendingScroll: false,
-            uploadProgress: null
+            uploadProgress: null,
+            onlineUsers: [],
+            typingUsers: [],
+            typingTimer: null,
+            showEmojiPicker: false,
+            searchQuery: '',
+            searchResults: [],
+            searchLoading: false,
+            showSearch: false,
+            editingMessage: null,
+            editBody: '',
+            emojiCategories: {
+                'Смайлики': ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🫡','🤐','🤨','😐','😑','😶','🫥','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐'],
+                'Жесты': ['👋','🤚','🖐️','✋','🖖','🫱','🫲','🫳','🫴','👌','🤌','🤏','✌️','🤞','🫰','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','🫵','👍','👎','✊','👊','🤛','🤜','👏','🙌','🫶','👐','🤲','🤝','🙏'],
+                'Животные': ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐒','🐔','🐧','🐦','🐤','🐣','🐥','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🐛','🦋','🐌','🐞','🐜'],
+                'Еда': ['🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🥑','🍆','🥔','🥕','🌽','🌶️','🫑','🥒','🥬','🥦','🧄','🧅','🍄','🥜','🌰','🍞','🥐','🥖','🫓','🥨','🥯','🥞','🧇'],
+                'Объекты': ['⌚','📱','💻','⌨️','🖥️','🖨️','🖱️','🖲️','💾','💿','📀','📼','📷','📹','🎥','📽️','🎞️','📞','☎️','📟','📠','📺','📻','🎙️','🎚️','🎛️','🧭','⏱️','⏲️','⏰','🕰️','📡','🔋','🔌','💡','🔦','🕯️','🪔','🧯'],
+                'Символы': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉️','☸️','✡️','🔯','🕎','☯️','☦️','🛐','⛎','♈','♉','♊','♋','♌','♍']
+            },
+            dmUserId: ''
         }
     },
 
@@ -1504,6 +1523,254 @@ const app = Vue.createApp({
 
             this.joinedRooms();
         },
+
+        // ===== Presence =====
+        async heartbeat() {
+            const token = localStorage.getItem('token');
+            if (!token) return;
+
+            try {
+                const res = await fetch('/api/v1/presence/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                const data = await res.json();
+                if (data.online) {
+                    this.onlineUsers = data.online;
+                }
+            } catch (e) {}
+        },
+
+        isOnline(userId) {
+            return this.onlineUsers.includes(userId);
+        },
+
+        // ===== Typing =====
+        async sendTyping() {
+            const token = localStorage.getItem('token');
+            if (!token || !this.roomId) return;
+
+            try {
+                await fetch('/api/v1/typing/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ room_id: this.roomId })
+                });
+            } catch (e) {}
+        },
+
+        async stopTyping() {
+            const token = localStorage.getItem('token');
+            if (!token || !this.roomId) return;
+
+            try {
+                await fetch('/api/v1/typing/', {
+                    method: 'DELETE',
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ room_id: this.roomId })
+                });
+            } catch (e) {}
+        },
+
+        async checkTyping() {
+            const token = localStorage.getItem('token');
+            if (!token || !this.roomId) return;
+
+            try {
+                const res = await fetch('/api/v1/getTyping/?room_id=' + encodeURIComponent(this.roomId), {
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                const data = await res.json();
+                this.typingUsers = data.typing || [];
+            } catch (e) {}
+        },
+
+        onTypingInput() {
+            this.sendTyping();
+            clearTimeout(this.typingTimer);
+            this.typingTimer = setTimeout(() => this.stopTyping(), 3000);
+        },
+
+        // ===== Emoji =====
+        toggleEmoji() {
+            this.showEmojiPicker = !this.showEmojiPicker;
+        },
+
+        insertEmoji(emoji) {
+            const el = this.$refs.bodyInput;
+            if (!el) return;
+
+            const start = el.selectionStart;
+            const end = el.selectionEnd;
+            const text = el.value;
+            el.value = text.slice(0, start) + emoji + text.slice(end);
+            el.selectionStart = el.selectionEnd = start + emoji.length;
+            el.focus();
+
+            this.showEmojiPicker = false;
+        },
+
+        // ===== Search =====
+        toggleSearch() {
+            this.showSearch = !this.showSearch;
+            if (!this.showSearch) {
+                this.searchQuery = '';
+                this.searchResults = [];
+            }
+        },
+
+        async searchMessages() {
+            const token = localStorage.getItem('token');
+            if (!token || !this.roomId || !this.searchQuery.trim()) return;
+
+            this.searchLoading = true;
+            try {
+                const res = await fetch('/api/v1/search/?room_id=' + encodeURIComponent(this.roomId) + '&q=' + encodeURIComponent(this.searchQuery), {
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                this.searchResults = await res.json();
+            } catch (e) {
+                this.searchResults = [];
+            }
+            this.searchLoading = false;
+        },
+
+        // ===== Edit =====
+        startEdit(msg) {
+            this.editingMessage = msg;
+            this.editBody = msg.json?.content?.body || '';
+            this.$nextTick(() => {
+                const el = document.getElementById('editInput');
+                if (el) {
+                    el.focus();
+                    el.style.height = 'auto';
+                    el.style.height = el.scrollHeight + 'px';
+                }
+            });
+        },
+
+        cancelEdit() {
+            this.editingMessage = null;
+            this.editBody = '';
+        },
+
+        async saveEdit() {
+            if (!this.editingMessage || !this.editBody.trim()) return;
+
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/v1/editMessage/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    event_id: this.editingMessage.event_id,
+                    room_id: this.roomId,
+                    body: this.editBody.trim()
+                })
+            });
+
+            const result = await res.json();
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            const msg = this.messagesStore[this.roomId]?.find(m => m.event_id === this.editingMessage.event_id);
+            if (msg) {
+                msg.json.content.body = this.editBody.trim();
+                msg.json.content.edited = true;
+            }
+
+            this.updateMessages();
+            this.cancelEdit();
+        },
+
+        onEditKeydown(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.saveEdit();
+            }
+            if (e.key === 'Escape') {
+                this.cancelEdit();
+            }
+        },
+
+        // ===== DM =====
+        async startDM() {
+            if (!this.dmUserId.trim()) return;
+
+            const token = localStorage.getItem('token');
+            const targetId = this.dmUserId.trim();
+
+            const res = await fetch('/api/v1/directMessage/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: targetId })
+            });
+
+            const result = await res.json();
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            const modalEl = document.getElementById('dmModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            this.dmUserId = '';
+
+            this.joinedRooms();
+            setTimeout(() => {
+                const room = this.rooms.find(r => r.room_id === result.room_id);
+                if (room) this.openRoom(room);
+            }, 500);
+        },
+
+        async openDM(userId) {
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/directMessage/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ user_id: userId })
+            });
+
+            const result = await res.json();
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            this.joinedRooms();
+            setTimeout(() => {
+                const room = this.rooms.find(r => r.room_id === result.room_id);
+                if (room) this.openRoom(room);
+            }, 500);
+        }
     },
 
     mounted() {
@@ -1527,6 +1794,9 @@ const app = Vue.createApp({
 
         setInterval(() => this.joinedRooms(), 60000);
         setInterval(() => this.sync(), 1000);
+        setInterval(() => this.heartbeat(), 15000);
+        setInterval(() => { if (this.roomId) this.checkTyping(); }, 3000);
+        this.heartbeat();
         
         document.getElementById('formCreateRoom')
             .addEventListener('submit', this.createRoom);

@@ -7,6 +7,8 @@ use app\models\EventJson;
 use app\models\AccessToken;
 use app\models\RoomMemberships;
 use app\models\Filter;
+use app\models\UserPresence;
+use app\models\TypingIndicator;
 
 /**
  * API V1
@@ -16,9 +18,12 @@ use app\models\Filter;
  */
 class V1Controller extends \wco\kernel\Controller{
     protected $data = [];
-
+    protected $modelFilter = '';
+    
     function __construct() {
         parent::__construct();
+        
+        $this->modelFilter = new Filter();
 
         $rawInput = file_get_contents("php://input");
         $jsonData = json_decode($rawInput, true);
@@ -716,6 +721,332 @@ class V1Controller extends \wco\kernel\Controller{
 
         header('Content-Type: application/json');
         echo json_encode(['hash' => $hash]);
+        return true;
+    }
+
+    /**
+     * Heartbeat присутствия + список онлайн-пользователей.
+     */
+    public function actionPresence() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $mPresence = new UserPresence();
+        $mPresence->heartbeat($mAccesToken->sender);
+
+        $online = $mPresence->getOnlineUsers();
+        $userIds = array_map(fn($u) => $u['user_id'], $online);
+
+        header('Content-Type: application/json');
+        echo json_encode(['online' => $userIds]);
+        return true;
+    }
+
+    /**
+     * Индикатор набора текста.
+     * POST: set typing; DELETE: stop typing.
+     */
+    public function actionTyping() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $mTyping = new TypingIndicator();
+        $method = $_SERVER['REQUEST_METHOD'];
+
+        if ($method === 'DELETE') {
+            $roomId = $this->data['room_id'] ?? '';
+            if ($roomId) {
+                $mTyping->stopTyping($mAccesToken->sender, strip_tags($roomId));
+            }
+            header('Content-Type: application/json');
+            echo json_encode(["status" => "ok"]);
+            return true;
+        }
+
+        $roomId = $this->data['room_id'] ?? '';
+        if (!$roomId) {
+            http_response_code(400);
+            echo json_encode(["error" => "room_id required"]);
+            return true;
+        }
+
+        $mTyping->setTyping($mAccesToken->sender, strip_tags($roomId));
+        $typingUsers = $mTyping->getTypingUsers(strip_tags($roomId), $mAccesToken->sender);
+
+        header('Content-Type: application/json');
+        echo json_encode(["status" => "ok", "typing" => $typingUsers]);
+        return true;
+    }
+
+    /**
+     * Получить кто набирает текст в комнате.
+     */
+    public function actionGetTyping() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $roomId = strip_tags($_GET['room_id'] ?? '');
+        if (!$roomId) {
+            http_response_code(400);
+            echo json_encode(["error" => "room_id required"]);
+            return true;
+        }
+
+        $mTyping = new TypingIndicator();
+        $typingUsers = $mTyping->getTypingUsers($roomId, $mAccesToken->sender);
+
+        header('Content-Type: application/json');
+        echo json_encode(["typing" => $typingUsers]);
+        return true;
+    }
+
+    /**
+     * Поиск сообщений в комнате.
+     */
+    public function actionSearch() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $roomId = strip_tags($_GET['room_id'] ?? '');
+        $query = strip_tags($_GET['q'] ?? '');
+
+        if (!$roomId || !$query) {
+            http_response_code(400);
+            echo json_encode(["error" => "room_id and q required"]);
+            return true;
+        }
+
+        $mEventJson = new EventJson();
+        $likeParam = '%' . $query . '%';
+        $sql = "SELECT event_id, json FROM event_json 
+                WHERE room_id = :room_id 
+                AND (
+                    JSON_UNQUOTE(JSON_EXTRACT(json, '$.content.body')) LIKE :q1 
+                    OR JSON_UNQUOTE(JSON_EXTRACT(json, '$.content.file_name')) LIKE :q2
+                ) 
+                ORDER BY event_id DESC LIMIT 100";
+        //self::setAssembly($sql);
+        $mEventJson->select()->from()->where("room_id = :room_id 
+                AND (
+                    JSON_UNQUOTE(JSON_EXTRACT(json, '$.content.body')) LIKE :q1 
+                    OR JSON_UNQUOTE(JSON_EXTRACT(json, '$.content.file_name')) LIKE :q2
+                ) 
+                ORDER BY event_id DESC LIMIT 100");
+        $results = $mEventJson->fetchAll([
+            'room_id' => $roomId,
+            'q1'      => $likeParam,
+            'q2'      => $likeParam
+        ]);
+
+        $messages = [];
+        foreach ($results as $row) {
+            $j = json_decode($row['json'], true);
+            if ($j) {
+                $messages[] = [
+                    'event_id' => $row['event_id'],
+                    'json'     => $j
+                ];
+            }
+        }
+
+        header('Content-Type: application/json');
+        echo json_encode($messages);
+        return true;
+    }
+
+    /**
+     * Редактирование сообщения.
+     */
+    public function actionEditMessage() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $eventId = $this->modelFilter->string($this->data['event_id'] ?? '');
+        $roomId = $this->modelFilter->string($this->data['room_id'] ?? '');
+        $newBody = $this->modelFilter->string($this->data['body'] ?? '');
+
+        if (!$eventId || !$roomId || empty($newBody)) {
+            http_response_code(400);
+            echo json_encode(["error" => "event_id, room_id and body required"]);
+            return true;
+        }
+
+        $mEvents = new Events();
+        $mEvents->select()->from()->where("event_id = :event_id");
+        $event = $mEvents->fetch(['event_id' => $eventId]);
+
+        if (!isset($event['event_id'])) {
+            http_response_code(404);
+            echo json_encode(["error" => "Event not found"]);
+            return true;
+        }
+
+        if ($event['sender'] !== $mAccesToken->sender) {
+            http_response_code(403);
+            echo json_encode(["error" => "You can only edit your own messages"]);
+            return true;
+        }
+
+        $mEventJson = new EventJson();
+        $mEventJson->select()->from()->where("event_id = :event_id AND room_id = :room_id");
+        $ej = $mEventJson->fetch(['event_id' => $eventId, 'room_id' => $roomId]);
+
+        if (!isset($ej['event_id'])) {
+            http_response_code(404);
+            echo json_encode(["error" => "Event JSON not found"]);
+            return true;
+        }
+
+        $jsonData = json_decode($ej['json'], true);
+        $jsonData['content']['body'] = strip_tags($newBody);
+        $jsonData['content']['edited'] = true;
+        $jsonData['content']['edited_at'] = round(microtime(true) * 1000);
+
+        $mEventJson->Update([
+            'json'     => json_encode($jsonData),
+            'event_id' => $eventId,
+            'room_id'  => $roomId
+        ], 'event_id = :event_id AND room_id = :room_id');
+
+        header('Content-Type: application/json');
+        echo json_encode(["status" => "ok"]);
+        return true;
+    }
+
+    /**
+     * Создание или получение личного диалога (DM) между двумя пользователями.
+     */
+    public function actionDirectMessage() {
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => "\"Invalid token\" error"]);
+            return true;
+        }
+
+        $targetUserId = strip_tags($this->data['user_id'] ?? '');
+        if (!$targetUserId) {
+            http_response_code(400);
+            echo json_encode(["error" => "user_id required"]);
+            return true;
+        }
+
+        $senderId = $mAccesToken->sender;
+
+        if ($targetUserId === $senderId) {
+            http_response_code(400);
+            echo json_encode(["error" => "Cannot create DM with yourself"]);
+            return true;
+        }
+
+        $mUser = new Users();
+        if (!$mUser->checkUser($targetUserId)) {
+            http_response_code(404);
+            echo json_encode(["error" => "User not found"]);
+            return true;
+        }
+
+        $mRoomMemberships = new RoomMemberships();
+        $mRooms = new Rooms();
+        $mEvents = new Events();
+        $mEventJson = new EventJson();
+        
+        $mRoomMemberships->select("t1.room_id")->from()
+                ->joinInner(['rm2' => $mRoomMemberships->init()], "rm2.room_id = t1.room_id")
+                ->joinInner(['r' => $mRooms->init()], "r.room_id = t1.room_id")
+                ->where("t1.user_id = :user1 AND rm2.user_id = :user2 AND r.join_rule = 'invite'");
+        $existing = $mRoomMemberships->fetch(['user1' => $senderId, 'user2' => $targetUserId]);
+
+        if (isset($existing['room_id'])) {
+            header('Content-Type: application/json');
+            echo json_encode(["status" => "ok", "room_id" => $existing['room_id']]);
+            return true;
+        }
+
+        $uuid = \Ramsey\Uuid\Uuid::uuid4()->toString();
+        $roomId = "!$uuid:" . WCO::$domain;
+
+        $mRooms->insert([
+            'room_id'   => $roomId,
+            'name'      => '',
+            'topic'     => '',
+            'join_rule' => 'invite',
+            'creator'   => $senderId,
+            'cdate'     => time()
+        ]);
+
+        $eventId1 = $mEvents->addEvent([
+            'type'    => 'm.room.member',
+            'room_id' => $roomId,
+            'sender'  => $senderId
+        ]);
+
+        $displayname1 = str_replace(['@', ':' . WCO::$domain], ['', ''], $senderId);
+        $mEventJson->add([
+            'event_id' => $eventId1,
+            'room_id'  => $roomId,
+            'json'     => json_encode([
+                'type'    => 'm.room.member',
+                'sender'  => $senderId,
+                'content' => ['displayname' => $displayname1, 'membership' => 'join']
+            ])
+        ]);
+
+        $mRoomMemberships->addUser([
+            'event_id'   => $eventId1,
+            'user_id'    => $senderId,
+            'sender'     => $senderId,
+            'room_id'    => $roomId,
+            'membership' => 'join'
+        ]);
+
+        $eventId2 = $mEvents->addEvent([
+            'type'    => 'm.room.member',
+            'room_id' => $roomId,
+            'sender'  => $senderId
+        ]);
+
+        $displayname2 = str_replace(['@', ':' . WCO::$domain], ['', ''], $targetUserId);
+        $mEventJson->add([
+            'event_id' => $eventId2,
+            'room_id'  => $roomId,
+            'json'     => json_encode([
+                'type'    => 'm.room.member',
+                'sender'  => $senderId,
+                'content' => ['displayname' => $displayname2, 'membership' => 'join']
+            ])
+        ]);
+
+        $mRoomMemberships->addUser([
+            'event_id'   => $eventId2,
+            'user_id'    => $targetUserId,
+            'sender'     => $senderId,
+            'room_id'    => $roomId,
+            'membership' => 'join'
+        ]);
+
+        header('Content-Type: application/json');
+        echo json_encode(["status" => "ok", "room_id" => $roomId]);
         return true;
     }
 }
