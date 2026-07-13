@@ -312,7 +312,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'update', 'upload_avatar', 'delete'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'leave', 'update', 'upload_avatar', 'delete'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -428,7 +428,8 @@ class V1Controller extends \wco\kernel\Controller{
             'sender' => $params['sender'],
             'content' => [
                 'displayname' => $displayname,
-                'membership'  => 'join'
+                'membership'  => 'join',
+                'body' => 'Не принял приглашение'
             ]
         ]);
 
@@ -533,6 +534,63 @@ class V1Controller extends \wco\kernel\Controller{
      * @param array $params [roomId, sender]
      * @return string
      */
+    /**
+     * Покинуть комнату / отказаться от приглашения.
+     *
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function leave(array $params): string {
+        if(!isset($params['roomId'])){
+            return json_encode(['error' => 'Not room']);
+        }
+
+        if(!isset($params['sender'])){
+            return json_encode(['error' => 'Not sender']);
+        }
+
+        $mEvents = new Events();
+        $eventId = $mEvents->addEvent([
+            'type'    => 'm.room.member',
+            'room_id' => $params['roomId'],
+            'sender'  => $params['sender']
+        ]);
+
+        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $params['sender']);
+
+        $json = json_encode([
+            'type'   => 'm.room.member',
+            'sender' => $params['sender'],
+            'content' => [
+                'displayname' => $displayname,
+                'membership'  => 'leave'
+            ]
+        ]);
+
+        $mEventJson = new EventJson();
+        $mEventJson->add([
+            'event_id' => $eventId,
+            'room_id'  => $params['roomId'],
+            'json'     => $json
+        ]);
+
+        $mRoomMemberships = new RoomMemberships();
+        $mRoomMemberships->delete("room_id = :roomId AND user_id = :userId")
+                ->execute([':roomId' => $params['roomId'], ':userId' => $params['sender']]);
+
+        return json_encode([
+            'status' => 'ok',
+            'event'  => [
+                'event_id'    => $eventId,
+                'type'        => 'm.room.member',
+                'room_id'     => $params['roomId'],
+                'sender'      => $params['sender'],
+                'received_ts' => time(),
+                'json'        => json_decode($json, true)
+            ]
+        ]);
+    }
+
     private function kick(array $params): string {
         if(!isset($params['roomId'])){
             return json_encode(['error' => 'Not room']);

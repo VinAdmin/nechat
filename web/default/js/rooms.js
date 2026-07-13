@@ -1071,6 +1071,83 @@ const app = Vue.createApp({
             this.roomMembership = 'join';
             this.joinedRooms();
         },
+
+        async declineInvite() {
+            if (!this.roomId) {
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/leave', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            if (result.event && this.messagesStore[this.roomId]) {
+                this.messagesStore[this.roomId].push(result.event);
+                this.updateMessages();
+            }
+
+            const leftRoomId = this.roomId;
+            notify('Вы отказались от приглашения', 'success', 4000);
+            this.rooms = this.rooms.filter(r => r.room_id !== leftRoomId);
+            this.roomId = null;
+            this.roomMembership = null;
+            this.messages = [];
+            this.joinedRooms();
+        },
+
+        async leaveRoom() {
+            if (!this.roomId) {
+                return;
+            }
+
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('leaveConfirmModal'));
+            modal.show();
+        },
+
+        async confirmLeave() {
+            if (!this.roomId) {
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/rooms/'+ this.roomId +'/leave', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({})
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            notify('Вы вышли из комнаты', 'success', 4000);
+            this.rooms = this.rooms.filter(r => r.room_id !== this.roomId);
+            this.roomId = null;
+            this.roomMembership = null;
+            this.messages = [];
+            this.joinedRooms();
+        },
         
         /**
          * Отправляет приглашение пользователю в текущую комнату.
@@ -1792,7 +1869,7 @@ const app = Vue.createApp({
 
         window.addEventListener('hashchange', this.parseHash);
 
-        setInterval(() => this.joinedRooms(), 60000);
+        setInterval(() => this.joinedRooms(), 30000);
         setInterval(() => this.sync(), 1000);
         setInterval(() => this.heartbeat(), 15000);
         setInterval(() => { if (this.roomId) this.checkTyping(); }, 3000);
