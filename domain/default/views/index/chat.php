@@ -87,6 +87,14 @@ $fInvite = new Form();
                         <button class="btn btn-success btn-sm" @click.prevent="acceptInvite">
                             Принять
                         </button>
+                        <button class="btn btn-outline-danger btn-sm" @click.prevent="declineInvite">
+                            Отказаться
+                        </button>
+                    </div>
+                    <div class="col-auto" v-if="roomMembership === 'join'">
+                        <button class="btn btn-outline-danger btn-sm" @click.prevent="leaveRoom">
+                            Выйти
+                        </button>
                     </div>
                 </div>
             </div>
@@ -97,6 +105,10 @@ $fInvite = new Form();
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
                     <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" class="msg-system">
                         <span class="msg-system-text">{{ msg.json.content.displayname || msg.json.sender }} присоединился</span>
+                        <span class="msg-system-time">{{ formatTime(msg) }}</span>
+                    </div>
+                    <div v-else-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'leave'" class="msg-system">
+                        <span class="msg-system-text">{{ msg.json.content.displayname || msg.json.sender }} покинул(а) комнату</span>
                         <span class="msg-system-time">{{ formatTime(msg) }}</span>
                     </div>
                     <div v-else-if="msg.json?.content?.deleted" :data-event-id="msg.event_id" :class="['msg', 'msg-deleted-row', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
@@ -536,6 +548,21 @@ $fInvite = new Form();
                 </div>
                 <div class="modal-body d-flex justify-content-center align-items-center p-0">
                     <video :src="previewVideo" class="video-preview" controls autoplay></video>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подтверждение выхода -->
+    <div class="modal fade" id="leaveConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-body text-center py-3">
+                    <p class="mb-3">Выйти из комнаты?</p>
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                        <button class="btn btn-danger btn-sm" data-bs-dismiss="modal" @click="confirmLeave">Выйти</button>
+                    </div>
                 </div>
             </div>
         </div>
