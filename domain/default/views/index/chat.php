@@ -25,6 +25,9 @@ $fInvite = new Form();
                 <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#publicRooms" title="Публичные комнаты">
                     🔍
                 </button>
+                <button class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#dmModal" title="Личные сообщения">
+                    ✉
+                </button>
                 <button class="btn btn-outline-info btn-sm" @click="openProfile" data-bs-toggle="modal" data-bs-target="#profileModal" title="Профиль">
                     👤
                 </button>
@@ -41,8 +44,11 @@ $fInvite = new Form();
                     <a href="#"
                        class="room-link"
                        @click.prevent="openRoom(room); showRooms = false">
-                        <img v-if="room.avatar_url" :src="room.avatar_url" class="room-avatar-sm" alt="" />
-                        <span v-else class="room-avatar-sm room-avatar-placeholder">{{ room.name.charAt(0) }}</span>
+                        <span class="room-avatar-sm-wrapper">
+                            <img v-if="room.avatar_url" :src="room.avatar_url" class="room-avatar-sm" alt="" />
+                            <span v-else class="room-avatar-sm room-avatar-placeholder">{{ room.name.charAt(0) }}</span>
+                            <span v-if="isOnline(room.creator)" class="online-dot"></span>
+                        </span>
                         {{ room.name }}
                         <span v-if="unreadCounts[room.room_id]" class="unread-badge">{{ unreadCounts[room.room_id] }}</span>
                     </a>
@@ -67,6 +73,9 @@ $fInvite = new Form();
                         <div v-if="roomTopic" class="room-topic">{{ roomTopic }}</div>
                     </div>
                     <div class="col-auto">
+                        <button class="btn btn-outline-secondary btn-sm me-1" title="Поиск в чате" @click="toggleSearch" v-if="roomId && roomMembership === 'join'">
+                            🔍
+                        </button>
                         <button class="btn btn-outline-secondary btn-sm me-1" title="Настройки комнаты" @click.prevent="openRoomSettings" data-bs-toggle="modal" data-bs-target="#roomSettings" v-if="roomId && roomMembership === 'join'">
                             ⚙
                         </button>
@@ -96,6 +105,11 @@ $fInvite = new Form();
                         </div>
                     </div>
                     <div v-else :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
+                        <div v-if="!isOwnMessage(msg)" class="msg-avatar">
+                            <img v-if="msg.json?.content?.avatar_url && !isSameSender(index)" :src="msg.json.content.avatar_url" class="msg-avatar-img" alt="" />
+                            <span v-else-if="!isSameSender(index)" class="msg-avatar-placeholder">{{ (msg.json?.content?.sender || '?').charAt(1).toUpperCase() }}</span>
+                        </div>
+                        <div class="msg-content-wrap">
                         <div v-if="!isSameSender(index) && !isOwnMessage(msg) && msg.json?.content?.sender" class="msg-sender-label">{{ msg.json.content.sender }}</div>
                         <div class="msg-bubble" :class="{ 'msg-has-reply': msg.json?.content?.reply_to }">
                             <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
@@ -124,19 +138,45 @@ $fInvite = new Form();
                                     </a>
                                 </div>
                             </div>
-                            <div v-if="msg.json?.content?.body" class="msg-text">{{ msg.json.content.body }}</div>
+                            <div v-if="msg.json?.content?.body" class="msg-text">{{ msg.json.content.body }} <span v-if="msg.json.content.edited" class="msg-edited">(ред.)</span></div>
                             <div class="msg-meta">
                                 <span class="msg-time">{{ formatTime(msg) }}</span>
                                 <span v-if="isOwnMessage(msg)" class="msg-check">✓✓</span>
                             </div>
                         </div>
                         <div class="msg-actions">
+                            <button v-if="!msg.json?.content?.deleted && isOwnMessage(msg)" class="btn-reply" @click="startEdit(msg)" title="Редактировать" style="color:#ffc107;">✎</button>
                             <button v-if="!msg.json?.content?.deleted" class="btn-reply" @click="setReply(msg)" title="Ответить">↩</button>
                             <button v-if="(isOwnMessage(msg) || isRoomOwner()) && !msg.json?.content?.deleted" class="btn-delete" @click="deleteMessage(msg.event_id)" title="Удалить">✕</button>
+                        </div>
                         </div>
                     </div>
                 </div>
                 </div>
+
+                <!-- Поиск в чате -->
+                <div v-if="showSearch" class="search-panel">
+                    <div class="search-input-row">
+                        <input type="text" v-model="searchQuery" class="form-control form-control-sm" placeholder="Поиск сообщений..." @keyup.enter="searchMessages" />
+                        <button class="btn btn-sm btn-primary" @click="searchMessages" :disabled="searchLoading">Найти</button>
+                        <button class="btn btn-sm btn-outline-secondary" @click="toggleSearch">✕</button>
+                    </div>
+                    <div v-if="searchLoading" class="search-loading">Загрузка...</div>
+                    <div v-if="!searchLoading && searchResults.length === 0 && searchQuery.length > 0" class="search-empty">Ничего не найдено</div>
+                    <div v-if="searchResults.length > 0" class="search-results">
+                        <div v-for="r in searchResults" :key="r.event_id" class="search-result-item" @click="scrollToMessage(r.event_id)">
+                            <span class="search-result-sender">{{ r.json?.sender }}</span>
+                            <span class="search-result-body">{{ r.json?.content?.body }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Индикатор набора текста -->
+                <div v-if="typingUsers.length > 0" class="typing-indicator">
+                    <span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>
+                    <span class="typing-text">{{ typingUsers.join(', ') }} {{ typingUsers.length === 1 ? 'набирает текст' : 'набирают текст' }}</span>
+                </div>
+
                 <!-- Форма -->
                 <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
                 <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
@@ -144,18 +184,43 @@ $fInvite = new Form();
                         <span class="reply-indicator-text">Ответ {{ replyTo.sender }}: {{ replyTo.body }}</span>
                         <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelReply" aria-label="Отменить"></button>
                     </div>
-                    <div class="composer-input-row">
-                        <textarea name="body" class="msgInput" placeholder="Введите сообщение" rows="1" @keydown="onBodyKeydown" @input="resizeTextarea" ref="bodyInput"></textarea>
+                    <div v-if="editingMessage" class="reply-indicator edit-indicator" style="border-color: rgba(255,200,0,0.3);">
+                        <span class="reply-indicator-text" style="color: #ffc107;">Редактирование сообщения</span>
+                        <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelEdit" aria-label="Отменить"></button>
+                    </div>
+                    <!-- Emoji picker -->
+                    <div v-if="showEmojiPicker" class="emoji-picker">
+                        <div class="emoji-categories">
+                            <div v-for="(emojis, cat) in emojiCategories" :key="cat" class="emoji-category">
+                                <div class="emoji-cat-title">{{ cat }}</div>
+                                <div class="emoji-grid">
+                                    <span v-for="e in emojis" :key="e" class="emoji-item" @click="insertEmoji(e)">{{ e }}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-if="editingMessage" class="composer-input-row">
+                        <textarea id="editInput" v-model="editBody" class="msgInput edit-input" placeholder="Введите новый текст..." rows="1" @keydown="onEditKeydown" @input="$event.target.style.height='auto'; $event.target.style.height=$event.target.scrollHeight+'px'"></textarea>
+                        <button type="button" class="btn btn-warning" @click="saveEdit">✔</button>
+                        <button type="button" class="btn btn-outline-secondary" @click="cancelEdit">✕</button>
+                    </div>
+                    <div v-else class="composer-input-row">
+                        <textarea name="body" class="msgInput" placeholder="Введите сообщение" rows="1" @keydown="onBodyKeydown" @input="resizeTextarea; onTypingInput()" ref="bodyInput"></textarea>
                         <?=$fMessages->Input(Form::INPUT_SUBMIT, 'send', '➤', [
                             'class' => 'btn btn-primary'
                         ])->Field()?>
-                </div>
+                    </div>
                 <div class="composer-actions">
                     <div v-if="uploadProgress !== null" class="upload-progress-bar">
                         <div class="upload-progress-track">
                             <div class="upload-progress-fill" :style="{ width: uploadProgress + '%' }"></div>
                         </div>
                         <span class="upload-progress-text">{{ uploadProgress }}%</span>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-outline-secondary file-upload-button" @click="toggleEmoji" title="Эмодзи">
+                            <span>😊</span>
+                        </button>
                     </div>
                     <div class="file-upload-wrapper">
                         <input type="file" name="file" id="file" class="file-input" @change="onFileChange" accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.txt" />
@@ -381,6 +446,7 @@ $fInvite = new Form();
                     <div class="list-group mt-2">
                         <div v-for="member in roomMembers" class="list-group-item list-group-item-action list-group-item-primary d-flex justify-content-between align-items-center">
                             <span>
+                                <span v-if="isOnline(member.user_id)" class="online-dot-inline"></span>
                                 {{ member.user_id }}
                                 <span v-if="member.membership === 'ban'" class="badge bg-danger ms-2">Забанен</span>
                             </span>
@@ -423,6 +489,25 @@ $fInvite = new Form();
                 </div>
                 <div class="modal-footer">
                         
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Личные сообщения -->
+    <div class="modal fade" id="dmModal" tabindex="-1" aria-labelledby="dmModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="dmModalLabel">Начать личный диалог</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Введите user_id пользователя (например, @username:<?=wco\kernel\WCO::$domain?>)</p>
+                    <div class="input-group">
+                        <input type="text" v-model="dmUserId" class="form-control" placeholder="@user:<?=wco\kernel\WCO::$domain?>" @keyup.enter="startDM" />
+                        <button class="btn btn-primary" @click="startDM" :disabled="!dmUserId.trim()">Открыть</button>
+                    </div>
                 </div>
             </div>
         </div>
