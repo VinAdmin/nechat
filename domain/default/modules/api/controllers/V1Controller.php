@@ -20,6 +20,8 @@ class V1Controller extends \wco\kernel\Controller{
     protected $data = [];
     protected $modelFilter = '';
     
+    public const INVALID_TOKEN = 'Invalid token error';
+            
     function __construct() {
         parent::__construct();
         
@@ -47,7 +49,7 @@ class V1Controller extends \wco\kernel\Controller{
         
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
         
@@ -80,7 +82,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
         
@@ -104,7 +106,7 @@ class V1Controller extends \wco\kernel\Controller{
         if (!$mAccesToken->getToken()) {
             //Ошибка если токен не валидный
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             
             return true;
         }
@@ -122,7 +124,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
         
@@ -140,7 +142,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -215,7 +217,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -231,7 +233,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
         
@@ -287,7 +289,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             
             return true;
         }
@@ -801,7 +803,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -824,7 +826,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -863,7 +865,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -889,7 +891,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -947,7 +949,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
@@ -1010,7 +1012,7 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {
             http_response_code(401);
-            echo json_encode(["error" => "\"Invalid token\" error"]);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
             return true;
         }
 
