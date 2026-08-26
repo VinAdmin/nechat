@@ -82,6 +82,21 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
 
+        // Отправлять сообщения (текст или файл) может только участник комнаты со статусом join.
+        // Проверяем это до обработки загрузки файла, чтобы не писать файл на диск от имени
+        // пользователя, у которого нет права публиковать сообщения в этой комнате.
+        $modelRoomMemberships = new RoomMemberships();
+        $modelRoomMemberships->select()->from()
+                ->where("room_id = :room_id AND user_id = :sender AND membership = 'join'");
+        $membership_res = $modelRoomMemberships->fetch([
+            'sender' => $sender,
+            'room_id' => $room['room_id'],
+        ]);
+        if (!$membership_res) {
+            http_response_code(403);
+            return json_encode(["error" => "Sending a message is prohibited"]);
+        }
+
         // Тип сообщения: m.text (текст) или m.file (файл)
         $type = isset($data['msgtype']) ? strip_tags($data['msgtype']) : 'm.text';
         $body = isset($data['body']) ? strip_tags($data['body']) : '';
@@ -122,7 +137,6 @@ class Events extends DB{
         $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;
         $chunkIndex = isset($data['chunk_index']) ? (int)$data['chunk_index'] : 0;
         $uploadId = isset($data['upload_id']) ? strip_tags($data['upload_id']) : null;
-        $fileSize = isset($data['file_size']) ? (int)$data['file_size'] : null;
 
         // Обработка загрузки файла
         if ($type === 'm.file' && !empty($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
@@ -206,9 +220,8 @@ class Events extends DB{
                         $fileType = $audioMimes[$fileExt];
                     }
                 }
-                if ($fileSize === null) {
-                    $fileSize = filesize($destination);
-                }
+                // Размер всегда берём из реально записанного файла, а не из данных клиента
+                $fileSize = filesize($destination);
                 if (empty($body)) {
                     $body = $fileName;  // Имя файла как текст сообщения по умолчанию
                 }
@@ -243,9 +256,8 @@ class Events extends DB{
                         $fileType = $audioMimes[$fileExt];
                     }
                 }
-                if ($fileSize === null) {
-                    $fileSize = (int)$fileInfo['size'];
-                }
+                // Размер всегда берём из реально записанного файла, а не из данных клиента
+                $fileSize = filesize($destination);
 
                 if (empty($body)) {
                     $body = $fileName;
@@ -257,42 +269,16 @@ class Events extends DB{
             }
         }
 
-        // Проверка прав на отправку сообщений
+        // Проверка обязательных полей по типу сообщения (права на отправку уже проверены выше)
         if ($type === 'm.text') {
             if (empty($body)) {
                 http_response_code(401);
                 return json_encode(["error" => "Body error"]);
             }
-
-            // Запрещаем отправку забаненным и приглашённым (не вступившим) пользователям
-            $modelRoomMemberships = new RoomMemberships();
-            $modelRoomMemberships->select()->from()
-                    ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
-            $membership_res = $modelRoomMemberships->fetch([
-                'sender' => $sender,
-                'room_id' => $room['room_id'],
-            ]);
-            if ($membership_res) {
-                http_response_code(401);
-                return json_encode(["error" => "Sending a message is prohibited"]);
-            }
         } elseif ($type === 'm.file') {
             if (!$fileUrl) {
                 http_response_code(401);
                 return json_encode(["error" => "File upload error"]);
-            }
-
-            // Та же проверка прав для файловых сообщений
-            $modelRoomMemberships = new RoomMemberships();
-            $modelRoomMemberships->select()->from()
-                    ->where("room_id = :room_id AND user_id = :sender AND membership IN ('ban', 'invite')");
-            $membership_res = $modelRoomMemberships->fetch([
-                'sender' => $sender,
-                'room_id' => $room['room_id'],
-            ]);
-            if ($membership_res) {
-                http_response_code(401);
-                return json_encode(["error" => "Sending a message is prohibited"]);
             }
         }
 

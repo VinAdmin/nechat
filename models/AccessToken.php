@@ -29,8 +29,7 @@ class AccessToken extends DB{
      */
     public function createToken(string $user_id): string {
         $payload = [
-            "user_id" => $user_id,
-            "exp" => time() + 3600 // 1 час
+            "user_id" => $user_id
         ];
 
         $jwt = JWT::encode($payload, SECRET_KEY, 'HS256');
@@ -46,6 +45,13 @@ class AccessToken extends DB{
     
     public function checkToken(string $token): bool {
         $token = trim(strip_tags($token));
+
+        try {
+            JWT::decode($token, new Key(SECRET_KEY, 'HS256'));
+        } catch (\Exception $e) {
+            return false;
+        }
+
         $mUsers = new Users();
 
         $this->select()->from()->joinInner(['u' => $mUsers->init()], "u.user_id = t1.user_id")->where('token = :token');
@@ -75,8 +81,15 @@ class AccessToken extends DB{
         
         $token = str_replace("Bearer ", "", $headers['Authorization']);
         $token = trim(strip_tags($token));
+
+        try {
+            JWT::decode($token, new Key(SECRET_KEY, 'HS256'));
+        } catch (\Exception $e) {
+            return false;
+        }
+
         $mUsers = new Users();
-        
+
         $this->select()->from()->joinInner(['u' => $mUsers->init()], "u.user_id = t1.user_id")->where('token = :token');
         $result = $this->fetch(['token' => $token]);
         

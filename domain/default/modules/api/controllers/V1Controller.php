@@ -40,8 +40,23 @@ class V1Controller extends \wco\kernel\Controller{
     }
 
     public function actionIndex() {
-        
+
         return true;
+    }
+
+    /**
+     * Проверяет, состоит ли пользователь в комнате (join или invite).
+     *
+     * @param string $roomId
+     * @param string $userId
+     * @return bool
+     */
+    private function isRoomMember(string $roomId, string $userId): bool {
+        $mRoomMemberships = new RoomMemberships();
+        $mRoomMemberships->select()->from()->where("room_id = :room_id AND user_id = :user_id AND membership IN ('join','invite')");
+        $membership = $mRoomMemberships->fetch(['room_id' => $roomId, 'user_id' => $userId]);
+
+        return isset($membership['user_id']);
     }
     
     public function actionSync() {
@@ -342,10 +357,14 @@ class V1Controller extends \wco\kernel\Controller{
         if(!isset($params['roomId'])){
             return json_encode(['error' => 'Not room']);
         }
-        
+
+        if(!isset($params['sender']) || !$this->isRoomMember($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Access denied']);
+        }
+
         $mRoomMemberships = new RoomMemberships();
         $mem = $mRoomMemberships->getRoomMembers($params['roomId']);
-        
+
         return json_encode($mem);
     }
     
@@ -876,6 +895,12 @@ class V1Controller extends \wco\kernel\Controller{
             return true;
         }
 
+        if (!$this->isRoomMember($roomId, $mAccesToken->sender)) {
+            http_response_code(403);
+            echo json_encode(["error" => "Access denied"]);
+            return true;
+        }
+
         $mTyping = new TypingIndicator();
         $typingUsers = $mTyping->getTypingUsers($roomId, $mAccesToken->sender);
 
@@ -901,6 +926,12 @@ class V1Controller extends \wco\kernel\Controller{
         if (!$roomId || !$query) {
             http_response_code(400);
             echo json_encode(["error" => "room_id and q required"]);
+            return true;
+        }
+
+        if (!$this->isRoomMember($roomId, $mAccesToken->sender)) {
+            http_response_code(403);
+            echo json_encode(["error" => "Access denied"]);
             return true;
         }
 
