@@ -388,7 +388,7 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'leave', 'update', 'upload_avatar', 'delete'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'leave', 'update', 'upload_avatar', 'delete', 'power_levels'];
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -435,7 +435,86 @@ class V1Controller extends \wco\kernel\Controller{
 
         return json_encode($mem);
     }
-    
+
+    /**
+     * Права доступа комнаты (событие m.room.power_levels).
+     *
+     * GET  /api/v1/rooms/{roomId}/power_levels/  — текущий набор уровней + мой уровень.
+     * POST /api/v1/rooms/{roomId}/power_levels/  — изменить:
+     *   { "user_id": "@u:d", "level": 50 }         — задать/снять уровень участнику
+     *   { "thresholds": { "events_default": 50 } } — изменить пороги действий
+     *
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function power_levels(array $params): string {
+        if(!isset($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Incorrect request']);
+        }
+
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+
+        // GET — читать может любой участник комнаты.
+        if($_SERVER['REQUEST_METHOD'] === 'GET'){
+            if(!$this->isRoomMember($params['roomId'], $params['sender'])){
+                return json_encode(['error' => 'Access denied']);
+            }
+            $levels = $mRooms->getPowerLevels($params['roomId']);
+            return json_encode([
+                'power_levels' => $levels,
+                'my_level'     => PowerLevels::levelForUser($levels, $params['sender'], $room['creator']),
+            ]);
+        }
+
+        // POST — менять права может тот, у кого уровень >= порога power_levels.
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'power_levels')){
+            return json_encode(['error' => 'Insufficient power level']);
+        }
+
+        $levels = $mRooms->getPowerLevels($params['roomId']);
+        $actorLevel = PowerLevels::levelForUser($levels, $params['sender'], $room['creator']);
+
+        // Вариант 1: назначить уровень конкретному участнику.
+        if(isset($this->data['user_id'], $this->data['level'])){
+            $mFilter = new Filter();
+            $targetUserId = $mFilter->string($this->data['user_id']);
+            $newLevel = (int) $this->data['level'];
+
+            $mMemberships = new RoomMemberships();
+            $member = $mMemberships->getRoomMember($params['roomId'], $targetUserId);
+            if(!isset($member['user_id']) || $member['membership'] !== 'join'){
+                return json_encode(['error' => 'User is not an active member of this room']);
+            }
+
+            $targetCurrentLevel = PowerLevels::levelForUser($levels, $targetUserId, $room['creator']);
+            $check = PowerLevels::canAssignLevel($actorLevel, $params['sender'], $targetUserId, $targetCurrentLevel, $newLevel);
+            if(!$check['ok']){
+                return json_encode(['error' => $check['error']]);
+            }
+
+            $next = PowerLevels::applyChange($levels, ['user_id' => $targetUserId, 'level' => $newLevel]);
+            (new Events())->setPowerLevels($params['roomId'], $params['sender'], $next);
+            return json_encode(['status' => 'ok']);
+        }
+
+        // Вариант 2: изменить пороги действий.
+        if(isset($this->data['thresholds']) && is_array($this->data['thresholds'])){
+            $check = PowerLevels::canModifyThresholds($actorLevel, $this->data['thresholds']);
+            if(!$check['ok']){
+                return json_encode(['error' => $check['error']]);
+            }
+            $next = PowerLevels::applyChange($levels, ['thresholds' => $this->data['thresholds']]);
+            (new Events())->setPowerLevels($params['roomId'], $params['sender'], $next);
+            return json_encode(['status' => 'ok']);
+        }
+
+        return json_encode(['error' => 'Nothing to change']);
+    }
+
     /**
      * Создает запрос на приглашение
      * 
