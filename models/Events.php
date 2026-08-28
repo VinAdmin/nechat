@@ -476,4 +476,38 @@ class Events extends DB{
 
         return true;
     }
+
+    /**
+     * Создаёт новое событие m.room.power_levels с полным набором уровней комнаты.
+     *
+     * Источник истины для прав комнаты — последнее событие этого типа
+     * (см. Rooms::getPowerLevels). Каждое изменение пишет полный content.
+     *
+     * @param string $roomId
+     * @param string $sender  инициатор изменения
+     * @param array  $content полный content события (уже смерженный вызывающим кодом)
+     * @return string event_id
+     */
+    public function setPowerLevels(string $roomId, string $sender, array $content): string {
+        $eventId = $this->addEvent([
+            'type'    => 'm.room.power_levels',
+            'room_id' => $roomId,
+            'sender'  => $sender,
+        ]);
+
+        $json = json_encode([
+            'type'    => 'm.room.power_levels',
+            'sender'  => $sender,
+            'content' => $content,
+        ]);
+
+        $mEventJson = new EventJson();
+        $mEventJson->add([
+            'event_id' => $eventId,
+            'room_id'  => $roomId,
+            'json'     => $json,
+        ]);
+
+        return $eventId;
+    }
 }

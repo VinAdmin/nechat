@@ -69,7 +69,13 @@ class Rooms extends DB{
                 'room_id'     => $room_id,
                 'membership'  => 'join'
             ]);
-            
+
+            // Стартовое состояние прав: создатель — уровень 100, остальные пороги по умолчанию.
+            $mEvents->setPowerLevels($room_id, $sender, array_merge(
+                PowerLevels::DEFAULTS,
+                ['users' => [$sender => PowerLevels::OWNER_LEVEL]]
+            ));
+
             return json_encode(["status" => "ok"]);
         }
         
@@ -264,7 +270,68 @@ class Rooms extends DB{
             'room_id'    => $roomId,
             'membership' => 'join'
         ]);
-        
+
         return json_encode(["status" => "ok"]);
+    }
+
+    /**
+     * Возвращает актуальный набор уровней доступа комнаты.
+     *
+     * Источник истины — последнее по времени событие m.room.power_levels в комнате
+     * (при равном received_ts — с максимальным event_id). Если события нет —
+     * возвращаются дефолты PowerLevels. Создателю комнаты уровень 100 проставляется
+     * всегда — он не может «залочить» себе комнату битым событием прав.
+     *
+     * @param string $roomId
+     * @return array нормализованный набор (PowerLevels::parse)
+     */
+    public function getPowerLevels(string $roomId): array {
+        $room = $this->getRoomId($roomId);
+        $creator = $room['creator'] ?? '';
+
+        $sql = "SELECT ej.json FROM events AS t1
+                INNER JOIN event_json AS ej ON ej.event_id = t1.event_id
+                WHERE t1.room_id = :room_id AND t1.type = 'm.room.power_levels'
+                ORDER BY t1.id DESC
+                LIMIT 1";
+        self::setAssembly($sql);
+        $row = $this->fetch(['room_id' => $roomId]);
+
+        $content = [];
+        if (isset($row['json'])) {
+            $decoded = json_decode($row['json'], true);
+            if (isset($decoded['content']) && is_array($decoded['content'])) {
+                $content = $decoded['content'];
+            }
+        }
+
+        $levels = PowerLevels::parse($content);
+
+        if ($creator !== '' && !isset($levels['users'][$creator])) {
+            $levels['users'][$creator] = PowerLevels::OWNER_LEVEL;
+        }
+
+        return $levels;
+    }
+
+    /**
+     * Эффективный уровень пользователя в комнате.
+     */
+    public function userPowerLevel(string $roomId, string $userId): int {
+        $room = $this->getRoomId($roomId);
+        $creator = $room['creator'] ?? '';
+        return PowerLevels::levelForUser($this->getPowerLevels($roomId), $userId, $creator);
+    }
+
+    /**
+     * Хватает ли у пользователя уровня для действия ($action — ключ PowerLevels::THRESHOLD_KEYS
+     * либо алиас 'unban').
+     */
+    public function canDo(string $roomId, string $userId, string $action): bool {
+        $levels = $this->getPowerLevels($roomId);
+        $room = $this->getRoomId($roomId);
+        $creator = $room['creator'] ?? '';
+        $level = PowerLevels::levelForUser($levels, $userId, $creator);
+        return $level >= PowerLevels::threshold($levels, $action);
     }
 }
