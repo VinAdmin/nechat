@@ -97,6 +97,14 @@ class Events extends DB{
             return json_encode(["error" => "Sending a message is prohibited"]);
         }
 
+        // Announcement-режим: если порог events_default выше уровня отправителя — писать нельзя.
+        $levels = $mRooms->getPowerLevels($room['room_id']);
+        $senderLevel = PowerLevels::levelForUser($levels, $sender, $room['creator'] ?? '');
+        if ($senderLevel < PowerLevels::threshold($levels, 'events_default')) {
+            http_response_code(403);
+            return json_encode(["error" => "Sending a message is prohibited"]);
+        }
+
         // Тип сообщения: m.text (текст) или m.file (файл)
         $type = isset($data['msgtype']) ? strip_tags($data['msgtype']) : 'm.text';
         $body = isset($data['body']) ? strip_tags($data['body']) : '';
