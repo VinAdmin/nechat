@@ -244,6 +244,64 @@ class V1Controller extends \wco\kernel\Controller{
         return true;
     }
 
+    /**
+     * Полное удаление собственного профиля пользователя.
+     * Требует подтверждения текущим паролем.
+     *
+     * @return bool
+     */
+    public function actionDeleteAccount() {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+            return true;
+        }
+
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
+            return true;
+        }
+
+        $password = (string)($this->data['password'] ?? '');
+        if ($password === '') {
+            http_response_code(400);
+            echo json_encode(["error" => "Password is required"]);
+            return true;
+        }
+
+        $mUsers = new Users();
+        $user = $mUsers->getUserById($mAccesToken->sender);
+
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(["error" => "User not found"]);
+            return true;
+        }
+
+        if (!password_verify($password, $user['password'])) {
+            http_response_code(403);
+            echo json_encode(["error" => "Incorrect password"]);
+            return true;
+        }
+
+        $mUsers->deleteAccount($mAccesToken->sender);
+
+        $avatarUrl = $user['avatar_url'] ?? '';
+        if (is_string($avatarUrl) && strpos($avatarUrl, '/f/') === 0) {
+            $avatarFile = __DIR__ . '/../../../../../data/uploads/' . basename($avatarUrl);
+            if (is_file($avatarFile)) {
+                @unlink($avatarFile);
+            }
+        }
+
+        echo json_encode(["status" => "ok"]);
+        return true;
+    }
+
     public function actionJoinRoom() {
         $mAccesToken = new AccessToken();
         if (!$mAccesToken->getToken()) {

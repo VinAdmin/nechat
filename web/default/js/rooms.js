@@ -49,6 +49,7 @@ const app = Vue.createApp({
             profilePassword: '',
             profileToken: '',
             profileAvatarFile: null,
+            deleteAccountPassword: '',
             voiceRecording: false,
             voiceMediaRecorder: null,
             voiceChunks: [],
@@ -1540,6 +1541,50 @@ const app = Vue.createApp({
                 }
             });
 
+            localStorage.clear();
+            document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
+            window.location.href = '/';
+        },
+
+        /**
+         * Закрывает окно профиля и открывает подтверждение удаления профиля.
+         */
+        deleteAccount() {
+            this.deleteAccountPassword = '';
+            bootstrap.Modal.getInstance(document.getElementById('profileModal'))?.hide();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteAccountConfirmModal')).show();
+        },
+
+        /**
+         * Удаляет профиль пользователя после подтверждения паролем.
+         * @returns {Promise<void>}
+         */
+        async confirmDeleteAccount() {
+            if (!this.deleteAccountPassword) {
+                notify('Введите текущий пароль', 'warning', 3000);
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/deleteAccount/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ password: this.deleteAccountPassword })
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            bootstrap.Modal.getInstance(document.getElementById('deleteAccountConfirmModal'))?.hide();
+            this.deleteAccountPassword = '';
             localStorage.clear();
             document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
             window.location.href = '/';

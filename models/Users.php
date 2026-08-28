@@ -5,6 +5,9 @@ namespace app\models;
 use wco\db\DB;
 use wco\kernel\WCO;
 use app\models\AccessToken;
+use app\models\RoomMemberships;
+use app\models\UserPresence;
+use app\models\TypingIndicator;
 
 /**
  * Описание класса: Работа c пользователем.
@@ -98,6 +101,40 @@ class Users extends DB{
         $this->Update($update, 'user_id = :user_id');
 
         return json_encode(["status" => "ok"]);
+    }
+
+    /**
+     * Полное удаление профиля пользователя.
+     *
+     * Удаляет только собственные данные пользователя: все токены доступа
+     * (завершает все сессии), членства в комнатах, записи присутствия и
+     * индикаторов набора, и саму строку в `users`.
+     *
+     * Комнаты, созданные пользователем (`rooms.creator`), а также его события
+     * (`events` / `event_json`) намеренно НЕ удаляются — такие комнаты
+     * остаются без владельца, история сообщений сохраняется.
+     *
+     * Файл аватара из `data/uploads/` удаляется отдельно в
+     * `V1Controller::actionDeleteAccount()` (работа с ФС — на уровне контроллера).
+     *
+     * @param string $user_id
+     * @return void
+     */
+    public function deleteAccount(string $user_id): void {
+        (new AccessToken())->delete("user_id = :user_id")
+                ->execute([':user_id' => $user_id]);
+
+        (new RoomMemberships())->delete("user_id = :user_id")
+                ->execute([':user_id' => $user_id]);
+
+        (new UserPresence())->delete("user_id = :user_id")
+                ->execute([':user_id' => $user_id]);
+
+        (new TypingIndicator())->delete("user_id = :user_id")
+                ->execute([':user_id' => $user_id]);
+
+        $this->delete("user_id = :user_id")
+                ->execute([':user_id' => $user_id]);
     }
 
     public function registration(): string {

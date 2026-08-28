@@ -408,8 +408,26 @@ $fInvite = new Form();
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger me-auto" @click="deleteAccount">Удалить профиль</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
                     <button type="button" class="btn btn-primary" @click="saveProfile">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подтверждение удаления профиля -->
+    <div class="modal fade" id="deleteAccountConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-body py-3">
+                    <p class="mb-2 text-center">Удалить профиль безвозвратно?</p>
+                    <p class="small text-white-50 mb-3">Все ваши сессии, членства в комнатах и данные профиля будут удалены. Отменить это действие нельзя.</p>
+                    <input type="password" v-model="deleteAccountPassword" class="form-control form-control-sm mb-3" placeholder="Текущий пароль" />
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                        <button class="btn btn-danger btn-sm" @click="confirmDeleteAccount">Удалить</button>
+                    </div>
                 </div>
             </div>
         </div>
