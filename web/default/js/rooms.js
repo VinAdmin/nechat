@@ -442,6 +442,12 @@ const app = Vue.createApp({
             this.saveCache();
             this.updateMessages();
             this.checkVersion();
+
+            // Подстраховка: если по открытой комнате нет уровней доступа
+            // (событие m.room.power_levels старше since и не пришло в этот sync) — дозагружаем.
+            if (this.roomId && !this.roomPowerLevels[this.roomId]) {
+                this.fetchPowerLevels(this.roomId);
+            }
         },
 
         async checkVersion() {
@@ -545,6 +551,7 @@ const app = Vue.createApp({
                 }
 
                 this.updateMessages();
+                this.fetchPowerLevels(id);
             }
         },
 
@@ -2138,8 +2145,9 @@ const app = Vue.createApp({
             this.roomId = roomId;
             this.roomName = localStorage.getItem('room_name');
             this.updateMessages();
+            this.fetchPowerLevels(roomId);
         }
-        
+
         document.getElementById('formInvite')
             .addEventListener('submit', this.invite);
 
