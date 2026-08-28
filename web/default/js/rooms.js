@@ -16,6 +16,9 @@ const POWER_DEFAULTS = {
     power_levels: 100,
 };
 
+/** Защёлка, чтобы принудительный логаут выполнялся один раз (несколько опросов могут словить 401 одновременно). */
+let forcedLogout = false;
+
 /**
  * Vue-приложение для управления интерфейсом чата и данными.
  */
@@ -152,11 +155,15 @@ const app = Vue.createApp({
                 }
             });
 
+            if (res.status === 401 || res.status === 403) {
+                this.forceLogout('Сессия завершена, войдите заново');
+                return;
+            }
+
             const data = await res.json();
 
             if (data.error) {
-                notify(data.error, 'warning', 4000);
-                window.location.href = '/';
+                this.forceLogout(data.error);
                 return;
             }
 
@@ -343,6 +350,11 @@ const app = Vue.createApp({
                 return;
             }
 
+            if (res.status === 401 || res.status === 403) {
+                this.forceLogout('Сессия завершена, войдите заново');
+                return;
+            }
+
             if (!res.ok) {
                 if (!this.syncFailed) {
                     this.syncFailed = true;
@@ -352,12 +364,9 @@ const app = Vue.createApp({
             }
 
             const data = await res.json();
-            
+
             if (data.error) {
-                notify(data.error, 'warning', 5000);
-                localStorage.clear();
-                sessionStorage.clear();
-                window.location.href = '/';
+                this.forceLogout(data.error);
                 return;
             }
 
@@ -1716,6 +1725,22 @@ const app = Vue.createApp({
             if (!this.profilePassword && !this.profileAvatarFile && !nameChanged) {
                 notify('Нет изменений для сохранения', 'info', 3000);
             }
+        },
+
+        /**
+         * Принудительно завершает сессию на клиенте, когда сервер отверг токен
+         * (удалён из БД, отозван и т.п.): чистит localStorage, sessionStorage,
+         * cookie с токеном и уводит на страницу входа.
+         * @param {string} [msg] Текст уведомления для пользователя.
+         */
+        forceLogout(msg) {
+            if (forcedLogout) return;
+            forcedLogout = true;
+            notify(msg || 'Сессия завершена, войдите заново', 'warning', 5000);
+            localStorage.clear();
+            sessionStorage.clear();
+            document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
+            window.location.href = '/';
         },
 
         /**
