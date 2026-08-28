@@ -3,6 +3,19 @@
  * @copyright (c) 2026, Olkhin Vitaliy
  **/
  
+/** Пороги уровней доступа комнаты по умолчанию (зеркало app\models\PowerLevels::DEFAULTS). */
+const POWER_DEFAULTS = {
+    users: {},
+    users_default: 0,
+    events_default: 0,
+    invite: 0,
+    kick: 50,
+    ban: 50,
+    redact: 50,
+    state_default: 50,
+    power_levels: 100,
+};
+
 /**
  * Vue-приложение для управления интерфейсом чата и данными.
  */
@@ -24,6 +37,7 @@ const app = Vue.createApp({
             roomMembership: null,
             syncToken: "",
             roomMembers: [],
+            roomPowerLevels: {},
             fileName: '',
             previewImage: '',
             previewImageName: '',
@@ -181,6 +195,7 @@ const app = Vue.createApp({
             this.unreadCounts[room.room_id] = 0;
 
             this.updateMessages();
+            this.fetchPowerLevels(room.room_id);
         },
         
         /**
@@ -355,6 +370,14 @@ const app = Vue.createApp({
                 let newEvents = 0;
                 for(const event of events){
                     if (!event?.event_id) continue;
+
+                    if (event.type === 'm.room.power_levels') {
+                        const content = event.json?.content;
+                        if (content) {
+                            this.roomPowerLevels[roomId] = content;
+                        }
+                        continue; // не показываем в ленте сообщений
+                    }
 
                     if (event.type === 'm.room.redaction') {
                         const redacts = event.json?.content?.redacts;
@@ -986,6 +1009,90 @@ const app = Vue.createApp({
             return room?.creator === uid;
         },
 
+        /**
+         * Актуальные пороги уровней доступа комнаты (с дефолтами).
+         * @param {string} roomId
+         * @returns {object}
+         */
+        roomLevels(roomId) {
+            return Object.assign({}, POWER_DEFAULTS, this.roomPowerLevels[roomId] || {});
+        },
+
+        /**
+         * Эффективный уровень текущего пользователя в комнате.
+         * @param {string} roomId
+         * @returns {number}
+         */
+        myLevel(roomId) {
+            const uid = localStorage.getItem('user_id');
+            const lv = this.roomLevels(roomId);
+            const room = this.rooms.find(r => r.room_id === roomId);
+            if (room && room.creator === uid) {
+                return Math.max(100, (lv.users && lv.users[uid]) || 100);
+            }
+            if (lv.users && Object.prototype.hasOwnProperty.call(lv.users, uid)) {
+                return lv.users[uid];
+            }
+            return lv.users_default || 0;
+        },
+
+        /**
+         * Хватает ли текущему пользователю уровня для действия.
+         * @param {string} action  events_default|invite|kick|ban|unban|redact|state_default|power_levels
+         * @param {string} [roomId]
+         * @returns {boolean}
+         */
+        can(action, roomId) {
+            roomId = roomId || this.roomId;
+            if (!roomId) return false;
+            const key = action === 'unban' ? 'ban' : action;
+            const lv = this.roomLevels(roomId);
+            return this.myLevel(roomId) >= (lv[key] ?? 100);
+        },
+
+        /**
+         * Может ли текущий пользователь писать в открытую комнату (announcement-режим).
+         * @returns {boolean}
+         */
+        canPost() {
+            if (!this.roomId) return true;
+            const lv = this.roomLevels(this.roomId);
+            return this.myLevel(this.roomId) >= (lv.events_default || 0);
+        },
+
+        /**
+         * Человекочитаемая метка уровня доступа.
+         * @param {number} level
+         * @returns {string}
+         */
+        powerLabel(level) {
+            level = Number(level) || 0;
+            if (level >= 100) return 'Владелец';
+            if (level >= 50) return 'Модератор';
+            return 'Участник';
+        },
+
+        /**
+         * Загружает пороги уровней доступа комнаты с сервера.
+         * @param {string} roomId
+         * @returns {Promise<void>}
+         */
+        async fetchPowerLevels(roomId) {
+            if (!roomId) return;
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch('/api/v1/rooms/' + roomId + '/power_levels/', {
+                    headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' }
+                });
+                const result = await res.json();
+                if (result && result.power_levels) {
+                    this.roomPowerLevels[roomId] = result.power_levels;
+                }
+            } catch (e) {
+                // мягкая деградация — остаются дефолты POWER_DEFAULTS
+            }
+        },
+
         isOwnMessage(msg) {
             const currentUser = localStorage.getItem('user_id');
             const sender = msg.json?.content?.sender || null;
@@ -1071,6 +1178,7 @@ const app = Vue.createApp({
             }
             
             this.roomMembers = result;
+            await this.fetchPowerLevels(room_id);
         },
 
         /**
