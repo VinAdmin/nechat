@@ -6,6 +6,7 @@ use app\models\Events;
 use app\models\EventJson;
 use app\models\AccessToken;
 use app\models\RoomMemberships;
+use app\models\PowerLevels;
 use app\models\Filter;
 use app\models\UserPresence;
 use app\models\TypingIndicator;
@@ -40,8 +41,23 @@ class V1Controller extends \wco\kernel\Controller{
     }
 
     public function actionIndex() {
-        
+
         return true;
+    }
+
+    /**
+     * Проверяет, состоит ли пользователь в комнате (join или invite).
+     *
+     * @param string $roomId
+     * @param string $userId
+     * @return bool
+     */
+    private function isRoomMember(string $roomId, string $userId): bool {
+        $mRoomMemberships = new RoomMemberships();
+        $mRoomMemberships->select()->from()->where("room_id = :room_id AND user_id = :user_id AND membership IN ('join','invite')");
+        $membership = $mRoomMemberships->fetch(['room_id' => $roomId, 'user_id' => $userId]);
+
+        return isset($membership['user_id']);
     }
     
     public function actionSync() {
@@ -204,9 +220,19 @@ class V1Controller extends \wco\kernel\Controller{
                 return true;
             }
 
-            echo $mUsers->updateProfile($mAccesToken->sender, [
-                'avatar_url' => $avatarUrl
-            ]);
+            // Собираем только реально переданные поля.
+            // avatar_url кладём лишь непустым: запрос со сменой одного имени
+            // не должен затирать уже загруженный аватар пустой строкой.
+            // Для name важен сам факт наличия ключа — пустая строка = сброс имени.
+            $profileUpdate = [];
+            if($avatarUrl !== ''){
+                $profileUpdate['avatar_url'] = $avatarUrl;
+            }
+            if(array_key_exists('name', $data)){
+                $profileUpdate['name'] = (string) $data['name'];
+            }
+
+            echo $mUsers->updateProfile($mAccesToken->sender, $profileUpdate);
             return true;
         }
 
@@ -225,6 +251,64 @@ class V1Controller extends \wco\kernel\Controller{
         $mAccesToken->deleteToken($token);
 
         header('Content-Type: application/json');
+        echo json_encode(["status" => "ok"]);
+        return true;
+    }
+
+    /**
+     * Полное удаление собственного профиля пользователя.
+     * Требует подтверждения текущим паролем.
+     *
+     * @return bool
+     */
+    public function actionDeleteAccount() {
+        header('Content-Type: application/json');
+
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+            http_response_code(405);
+            echo json_encode(["error" => "Method not allowed"]);
+            return true;
+        }
+
+        $mAccesToken = new AccessToken();
+        if (!$mAccesToken->getToken()) {
+            http_response_code(401);
+            echo json_encode(["error" => self::INVALID_TOKEN]);
+            return true;
+        }
+
+        $password = (string)($this->data['password'] ?? '');
+        if ($password === '') {
+            http_response_code(400);
+            echo json_encode(["error" => "Password is required"]);
+            return true;
+        }
+
+        $mUsers = new Users();
+        $user = $mUsers->getUserById($mAccesToken->sender);
+
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(["error" => "User not found"]);
+            return true;
+        }
+
+        if (!password_verify($password, $user['password'])) {
+            http_response_code(403);
+            echo json_encode(["error" => "Incorrect password"]);
+            return true;
+        }
+
+        $mUsers->deleteAccount($mAccesToken->sender);
+
+        $avatarUrl = $user['avatar_url'] ?? '';
+        if (is_string($avatarUrl) && strpos($avatarUrl, '/f/') === 0) {
+            $avatarFile = __DIR__ . '/../../../../../data/uploads/' . basename($avatarUrl);
+            if (is_file($avatarFile)) {
+                @unlink($avatarFile);
+            }
+        }
+
         echo json_encode(["status" => "ok"]);
         return true;
     }
@@ -314,7 +398,8 @@ class V1Controller extends \wco\kernel\Controller{
             }
             
             //Поиск функции контроллера.
-            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'leave', 'update', 'upload_avatar', 'delete'];
+            $allowed = ['members', 'invite', 'accept', 'ban', 'unban', 'kick', 'leave', 'update', 'upload_avatar', 'delete', 'power_levels'];
+
             if(in_array($members['members'], $allowed)){
                 $data = [
                     'roomId' => $members['room_id'],
@@ -342,13 +427,105 @@ class V1Controller extends \wco\kernel\Controller{
         if(!isset($params['roomId'])){
             return json_encode(['error' => 'Not room']);
         }
-        
+
+        if(!isset($params['sender']) || !$this->isRoomMember($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Access denied']);
+        }
+
         $mRoomMemberships = new RoomMemberships();
         $mem = $mRoomMemberships->getRoomMembers($params['roomId']);
-        
+
+        $mRooms = new Rooms();
+        $levels = $mRooms->getPowerLevels($params['roomId']);
+        $room = $mRooms->getRoomId($params['roomId']);
+        $creator = $room['creator'] ?? '';
+        foreach($mem as &$m){
+            $m['power_level'] = PowerLevels::levelForUser($levels, $m['user_id'] ?? '', $creator);
+        }
+        unset($m);
+
         return json_encode($mem);
     }
-    
+
+    /**
+     * Права доступа комнаты (событие m.room.power_levels).
+     *
+     * GET  /api/v1/rooms/{roomId}/power_levels/  — текущий набор уровней + мой уровень.
+     * POST /api/v1/rooms/{roomId}/power_levels/  — изменить:
+     *   { "user_id": "@u:d", "level": 50 }         — задать/снять уровень участнику
+     *   { "thresholds": { "events_default": 50 } } — изменить пороги действий
+     *
+     * @param array $params [roomId, sender]
+     * @return string
+     */
+    private function power_levels(array $params): string {
+        if(!isset($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Incorrect request']);
+        }
+
+        $mRooms = new Rooms();
+        $room = $mRooms->getRoomId($params['roomId']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+
+        // GET — читать может любой участник комнаты.
+        if($_SERVER['REQUEST_METHOD'] === 'GET'){
+            if(!$this->isRoomMember($params['roomId'], $params['sender'])){
+                return json_encode(['error' => 'Access denied']);
+            }
+            $levels = $mRooms->getPowerLevels($params['roomId']);
+            return json_encode([
+                'power_levels' => $levels,
+                'my_level'     => PowerLevels::levelForUser($levels, $params['sender'], $room['creator']),
+            ]);
+        }
+
+        // POST — менять права может тот, у кого уровень >= порога power_levels.
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'power_levels')){
+            return json_encode(['error' => 'Insufficient power level']);
+        }
+
+        $levels = $mRooms->getPowerLevels($params['roomId']);
+        $actorLevel = PowerLevels::levelForUser($levels, $params['sender'], $room['creator']);
+
+        // Вариант 1: назначить уровень конкретному участнику.
+        if(isset($this->data['user_id'], $this->data['level'])){
+            $mFilter = new Filter();
+            $targetUserId = $mFilter->string($this->data['user_id']);
+            $newLevel = (int) $this->data['level'];
+
+            $mMemberships = new RoomMemberships();
+            $member = $mMemberships->getRoomMember($params['roomId'], $targetUserId);
+            if(!isset($member['user_id']) || $member['membership'] !== 'join'){
+                return json_encode(['error' => 'User is not an active member of this room']);
+            }
+
+            $targetCurrentLevel = PowerLevels::levelForUser($levels, $targetUserId, $room['creator']);
+            $check = PowerLevels::canAssignLevel($actorLevel, $params['sender'], $targetUserId, $targetCurrentLevel, $newLevel);
+            if(!$check['ok']){
+                return json_encode(['error' => $check['error']]);
+            }
+
+            $next = PowerLevels::applyChange($levels, ['user_id' => $targetUserId, 'level' => $newLevel]);
+            (new Events())->setPowerLevels($params['roomId'], $params['sender'], $next);
+            return json_encode(['status' => 'ok']);
+        }
+
+        // Вариант 2: изменить пороги действий.
+        if(isset($this->data['thresholds']) && is_array($this->data['thresholds'])){
+            $check = PowerLevels::canModifyThresholds($actorLevel, $this->data['thresholds']);
+            if(!$check['ok']){
+                return json_encode(['error' => $check['error']]);
+            }
+            $next = PowerLevels::applyChange($levels, ['thresholds' => $this->data['thresholds']]);
+            (new Events())->setPowerLevels($params['roomId'], $params['sender'], $next);
+            return json_encode(['status' => 'ok']);
+        }
+
+        return json_encode(['error' => 'Nothing to change']);
+    }
+
     /**
      * Создает запрос на приглашение
      * 
@@ -423,7 +600,8 @@ class V1Controller extends \wco\kernel\Controller{
             'sender'  => $params['sender']
         ]);
 
-        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $params['sender']);
+        // Отображаемое имя вступившего: поле name, иначе сам user_id.
+        $displayname = (new Users())->displayName($params['sender']);
 
         $json = json_encode([
             'type'   => 'm.room.member',
@@ -466,12 +644,19 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can ban users']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'ban')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $mFilter = new Filter();
         $userId = $mFilter->string($this->data['user_id']);
+
+        if($mRooms->userPowerLevel($params['roomId'], $userId) >= $mRooms->userPowerLevel($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Cannot modify a user with an equal or higher level']);
+        }
 
         $mRoomMemberships = new RoomMemberships();
         $updateResult = $mRoomMemberships->Update([
@@ -508,8 +693,11 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can unban users']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'unban')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $mFilter = new Filter();
@@ -607,13 +795,19 @@ class V1Controller extends \wco\kernel\Controller{
         }
 
         $mRooms = new Rooms();
-        $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can kick users']);
+        $room = $mRooms->getRoomId($params['roomId']);if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'kick')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $mFilter = new Filter();
         $userId = $mFilter->string($this->data['user_id']);
+
+        if($mRooms->userPowerLevel($params['roomId'], $userId) >= $mRooms->userPowerLevel($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Cannot modify a user with an equal or higher level']);
+        }
 
         $mRoomMemberships = new RoomMemberships();
         $mRoomMemberships->delete("room_id = :roomId AND user_id = :userId")
@@ -670,11 +864,10 @@ class V1Controller extends \wco\kernel\Controller{
         }
 
         $mRooms = new Rooms();
-        $room = $mRooms->getRoomId($params['roomId']);
-        $isOwner = isset($room['room_id']) && $room['creator'] === $params['sender'];
+        $canRedact = $mRooms->canDo($params['roomId'], $params['sender'], 'redact');
 
-        if($event['sender'] !== $params['sender'] && !$isOwner){
-            return json_encode(['error' => 'Only the author or room owner can delete the message']);
+        if($event['sender'] !== $params['sender'] && !$canRedact){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $fileToDelete = null;
@@ -750,8 +943,11 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can change the avatar']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'state_default')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         if(empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK){
@@ -876,6 +1072,12 @@ class V1Controller extends \wco\kernel\Controller{
             return true;
         }
 
+        if (!$this->isRoomMember($roomId, $mAccesToken->sender)) {
+            http_response_code(403);
+            echo json_encode(["error" => "Access denied"]);
+            return true;
+        }
+
         $mTyping = new TypingIndicator();
         $typingUsers = $mTyping->getTypingUsers($roomId, $mAccesToken->sender);
 
@@ -901,6 +1103,12 @@ class V1Controller extends \wco\kernel\Controller{
         if (!$roomId || !$query) {
             http_response_code(400);
             echo json_encode(["error" => "room_id and q required"]);
+            return true;
+        }
+
+        if (!$this->isRoomMember($roomId, $mAccesToken->sender)) {
+            http_response_code(403);
+            echo json_encode(["error" => "Access denied"]);
             return true;
         }
 
@@ -1073,7 +1281,9 @@ class V1Controller extends \wco\kernel\Controller{
             'sender'  => $senderId
         ]);
 
-        $displayname1 = str_replace(['@', ':' . WCO::$domain], ['', ''], $senderId);
+        // Отображаемые имена обоих участников личной комнаты (name или user_id).
+        $displayname1 = (new Users())->displayName($senderId);
+
         $mEventJson->add([
             'event_id' => $eventId1,
             'room_id'  => $roomId,
@@ -1098,7 +1308,8 @@ class V1Controller extends \wco\kernel\Controller{
             'sender'  => $senderId
         ]);
 
-        $displayname2 = str_replace(['@', ':' . WCO::$domain], ['', ''], $targetUserId);
+        $displayname2 = (new Users())->displayName($targetUserId);
+
         $mEventJson->add([
             'event_id' => $eventId2,
             'room_id'  => $roomId,

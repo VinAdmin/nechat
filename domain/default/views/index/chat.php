@@ -103,7 +103,15 @@ $fInvite = new Form();
                 <div class="list" ref="messages">
                 <div v-for="(msg, index) in messages" :key="msg.event_id">
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
-                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" class="msg-system">
+                    <!-- Событие смены отображаемого имени (Events::emitDisplayNameChange).
+                         content.rename=true; при content.cleared имя сброшено к логину.
+                         Ветка идёт ДО обычной "join", т.к. у события membership тоже 'join'. -->
+                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.rename" class="msg-system">
+                        <span class="msg-system-text" v-if="msg.json.content.cleared">{{ msg.json.content.prev_displayname }} вернул(а) логин</span>
+                        <span class="msg-system-text" v-else>{{ msg.json.content.prev_displayname }} сменил(а) имя на {{ msg.json.content.displayname }}</span>
+                        <span class="msg-system-time">{{ formatTime(msg) }}</span>
+                    </div>
+                    <div v-else-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" class="msg-system">
                         <span class="msg-system-text">{{ msg.json.content.displayname || msg.json.sender }} присоединился</span>
                         <span class="msg-system-time">{{ formatTime(msg) }}</span>
                     </div>
@@ -119,13 +127,13 @@ $fInvite = new Form();
                     <div v-else :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
                         <div v-if="!isOwnMessage(msg)" class="msg-avatar">
                             <img v-if="msg.json?.content?.avatar_url && !isSameSender(index)" :src="msg.json.content.avatar_url" class="msg-avatar-img" alt="" />
-                            <span v-else-if="!isSameSender(index)" class="msg-avatar-placeholder">{{ (msg.json?.content?.sender || '?').charAt(1).toUpperCase() }}</span>
+                            <span v-else-if="!isSameSender(index)" class="msg-avatar-placeholder">{{ senderInitial(msg) }}</span>
                         </div>
                         <div class="msg-content-wrap">
-                        <div v-if="!isSameSender(index) && !isOwnMessage(msg) && msg.json?.content?.sender" class="msg-sender-label">{{ msg.json.content.sender }}</div>
+                        <div v-if="!isSameSender(index) && !isOwnMessage(msg) && msg.json?.content?.sender" class="msg-sender-label">{{ displayName(msg.json.content.displayname, msg.json.content.sender) }}</div>
                         <div class="msg-bubble" :class="{ 'msg-has-reply': msg.json?.content?.reply_to }">
                             <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
-                                <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
+                                <div class="reply-context-sender">{{ displayName(msg.json.content.reply_to.displayname, msg.json.content.reply_to.sender) || '?' }}</div>
                                 <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
                             </div>
                             <div v-if="msg.json?.content?.file_url">
@@ -177,7 +185,7 @@ $fInvite = new Form();
                     <div v-if="!searchLoading && searchResults.length === 0 && searchQuery.length > 0" class="search-empty">Ничего не найдено</div>
                     <div v-if="searchResults.length > 0" class="search-results">
                         <div v-for="r in searchResults" :key="r.event_id" class="search-result-item" @click="scrollToMessage(r.event_id)">
-                            <span class="search-result-sender">{{ r.json?.sender }}</span>
+                            <span class="search-result-sender">{{ displayName(r.json?.content?.displayname, r.json?.sender) }}</span>
                             <span class="search-result-body">{{ r.json?.content?.body }}</span>
                         </div>
                     </div>
@@ -190,10 +198,13 @@ $fInvite = new Form();
                 </div>
 
                 <!-- Форма -->
+                <div v-if="roomId && roomMembership === 'join' && !canPost()" class="msg-system announce-lock">
+                    В этой комнате могут писать только модераторы
+                </div>
                 <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
-                <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
+                <div class="messageComposer" v-show="roomId && roomMembership === 'join' && canPost()">
                     <div v-if="replyTo" class="reply-indicator">
-                        <span class="reply-indicator-text">Ответ {{ replyTo.sender }}: {{ replyTo.body }}</span>
+                        <span class="reply-indicator-text">Ответ {{ displayName(replyTo.displayname, replyTo.sender) }}: {{ replyTo.body }}</span>
                         <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelReply" aria-label="Отменить"></button>
                     </div>
                     <div v-if="editingMessage" class="reply-indicator edit-indicator" style="border-color: rgba(255,200,0,0.3);">
@@ -384,23 +395,27 @@ $fInvite = new Form();
                         <div v-else class="profile-avatar-preview profile-avatar-placeholder">{{ (profileUserId || '?').charAt(1).toUpperCase() }}</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">ID</label>
+                        <label class="form-label">ID</label>
                         <input type="text" class="form-control" :value="profileUserId" readonly />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Аватар</label>
+                        <label class="form-label">Имя</label>
+                        <input type="text" class="form-control" v-model="profileName" maxlength="255" placeholder="Показывать вместо логина" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Аватар</label>
                         <input type="file" accept="image/*" @change="onProfileAvatarChange" class="form-control" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Старый пароль</label>
+                        <label class="form-label">Старый пароль</label>
                         <input type="password" v-model="profileOldPassword" class="form-control" placeholder="Введите текущий пароль" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Новый пароль</label>
+                        <label class="form-label">Новый пароль</label>
                         <input type="password" v-model="profilePassword" class="form-control" placeholder="Оставьте пустым, если не хотите менять" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Токен доступа</label>
+                        <label class="form-label">Токен доступа</label>
                         <div class="input-group">
                             <input type="text" class="form-control" :value="profileToken" readonly id="tokenField" />
                             <button class="btn btn-outline-secondary" @click="copyToken" title="Копировать">📋</button>
@@ -408,8 +423,26 @@ $fInvite = new Form();
                     </div>
                 </div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger me-auto" @click="deleteAccount">Удалить профиль</button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
                     <button type="button" class="btn btn-primary" @click="saveProfile">Сохранить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Подтверждение удаления профиля -->
+    <div class="modal fade" id="deleteAccountConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content bg-dark text-white">
+                <div class="modal-body py-3">
+                    <p class="mb-2 text-center">Удалить профиль безвозвратно?</p>
+                    <p class="small text-white-50 mb-3">Все ваши сессии, членства в комнатах и данные профиля будут удалены. Отменить это действие нельзя.</p>
+                    <input type="password" v-model="deleteAccountPassword" class="form-control form-control-sm mb-3" placeholder="Текущий пароль" />
+                    <div class="d-flex justify-content-center gap-2">
+                        <button class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Отмена</button>
+                        <button class="btn btn-danger btn-sm" @click="confirmDeleteAccount">Удалить</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -447,6 +480,29 @@ $fInvite = new Form();
                             <option value="invite">Закрытая (только по приглашению)</option>
                         </select>
                     </div>
+
+                    <hr v-if="can('power_levels')" />
+                    <div v-if="can('power_levels')" class="mb-3">
+                        <label class="fw-bold">Кто может писать</label>
+                        <select v-model.number="settingsEventsDefault" class="form-control">
+                            <option value="0">Все участники</option>
+                            <option value="50">Только модераторы</option>
+                            <option value="100">Только владелец</option>
+                        </select>
+                        <small class="text-muted">Режим анонсов: при ограничении рядовые участники не смогут отправлять сообщения.</small>
+                    </div>
+                    <div v-if="can('power_levels')" class="mb-3">
+                        <details>
+                            <summary>Расширенные пороги</summary>
+                            <div class="row g-2 mt-1">
+                                <div class="col-6"><label class="small">Приглашать</label><input type="number" min="0" max="100" v-model.number="settingsInvite" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Выгонять</label><input type="number" min="0" max="100" v-model.number="settingsKick" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Банить</label><input type="number" min="0" max="100" v-model.number="settingsBan" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Удалять сообщения</label><input type="number" min="0" max="100" v-model.number="settingsRedact" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Менять настройки</label><input type="number" min="0" max="100" v-model.number="settingsStateDefault" class="form-control form-control-sm" /></div>
+                            </div>
+                        </details>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -474,14 +530,24 @@ $fInvite = new Form();
                         <div v-for="member in roomMembers" class="list-group-item list-group-item-action list-group-item-primary d-flex justify-content-between align-items-center">
                             <span>
                                 <span v-if="isOnline(member.user_id)" class="online-dot-inline"></span>
-                                {{ member.user_id }}
+                                {{ displayName(member.name, member.user_id) }}
+                                <span class="power-badge" :title="'Уровень доступа: ' + (member.power_level ?? 0)">{{ powerLabel(member.power_level) }}</span>
                                 <span v-if="member.membership === 'ban'" class="badge bg-danger ms-2">Забанен</span>
                             </span>
-                            <span v-if="isRoomOwner() && member.user_id !== roomCreator" class="d-flex gap-1">
-                                <button v-if="member.membership === 'ban'" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
-                                <template v-else>
-                                    <button class="btn btn-outline-warning btn-sm" @click="kick(member.user_id)" title="Выгнать (можно вернуться)">Выгнать</button>
-                                    <button class="btn btn-danger btn-sm" @click="ban(member.user_id)" title="Забанить (навсегда)">Забанить</button>
+                            <span class="d-flex gap-1 align-items-center power-controls">
+                                <select
+                                    v-if="can('power_levels') && member.membership === 'join' && member.user_id !== roomCreator && (member.power_level ?? 0) < myLevel(roomId)"
+                                    class="form-select form-select-sm"
+                                    :value="member.power_level ?? 0"
+                                    @change="setMemberLevel(member.user_id, $event.target.value)">
+                                    <option value="0">Участник</option>
+                                    <option value="50">Модератор</option>
+                                    <option :value="myLevel(roomId)">Максимум ({{ myLevel(roomId) }})</option>
+                                </select>
+                                <button v-if="member.membership === 'ban' && can('unban') && member.user_id !== roomCreator" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
+                                <template v-else-if="member.membership !== 'ban' && member.user_id !== roomCreator && (member.power_level ?? 0) < myLevel(roomId)">
+                                    <button v-if="can('kick')" class="btn btn-outline-warning btn-sm" @click="kick(member.user_id)" title="Выгнать (можно вернуться)">Выгнать</button>
+                                    <button v-if="can('ban')" class="btn btn-danger btn-sm" @click="ban(member.user_id)" title="Забанить (навсегда)">Забанить</button>
                                 </template>
                             </span>
                         </div>

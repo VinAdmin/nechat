@@ -54,7 +54,7 @@ $config_db = [
 ```sql
 CREATE TABLE users (
     user_id VARCHAR(255) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) DEFAULT NULL,          -- отображаемое имя; NULL/пусто => показываем user_id
     password VARCHAR(255) NOT NULL,
     avatar_url VARCHAR(500) DEFAULT NULL
 );
@@ -85,6 +85,7 @@ CREATE TABLE room_memberships (
 );
 
 CREATE TABLE events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT UNIQUE,  -- порядок событий (миграция data/migration_power_levels.sql)
     event_id VARCHAR(255) PRIMARY KEY,
     type VARCHAR(50) NOT NULL,
     room_id VARCHAR(255) NOT NULL,
@@ -220,8 +221,19 @@ vendor/          - Composer-зависимости
 - `POST /api/v1/rooms/{roomId}/invite/` — пригласить пользователя
 - `POST /api/v1/rooms/{roomId}/ban/` — забанить
 - `POST /api/v1/rooms/{roomId}/unban/` — разбанить
+- `GET|POST /api/v1/rooms/{roomId}/power_levels/` — уровни доступа комнаты
 - `POST /api/v1/delete_message/` — удалить сообщение
 - `GET /f/{filename}` — скачать файл
+
+### Права доступа к комнате (power levels)
+
+Числовые уровни в духе Matrix. Как и членство (`room_memberships` ← `m.room.member`),
+состояние прав вычисляется из последнего события `m.room.power_levels` в комнате —
+отдельной таблицы нет (для детерминированного порядка событий добавлена колонка
+`events.id`, миграция `data/migration_power_levels.sql`). В `content` события хранятся
+пороги действий (`events_default`, `invite`, `kick`, `ban`, `redact`, `state_default`,
+`power_levels`) и уровни отдельных участников (`users`). Создатель комнаты всегда
+имеет эффективный уровень 100. Подробности — в [API.md](API.md).
 
 ### Кэширование
 

@@ -389,6 +389,87 @@ GET /api/v1/sync/?since=1690000000
 
 ---
 
+### Права доступа комнаты (power levels)
+
+Права комнаты — числовые уровни в духе Matrix. Актуальное состояние хранится как
+последнее событие `m.room.power_levels` в комнате (отдельной таблицы нет).
+
+#### Получить уровни
+
+- URL: `/api/v1/rooms/{roomId}/power_levels/`
+- Метод: `GET`
+- Требуется авторизация. Доступно любому участнику комнаты.
+
+Ответ:
+
+```json
+{
+  "power_levels": {
+    "users": { "@alice:example.com": 100, "@bob:example.com": 50 },
+    "users_default": 0,
+    "events_default": 0,
+    "invite": 0,
+    "kick": 50,
+    "ban": 50,
+    "redact": 50,
+    "state_default": 50,
+    "power_levels": 100
+  },
+  "my_level": 50
+}
+```
+
+#### Изменить уровни
+
+- URL: `/api/v1/rooms/{roomId}/power_levels/`
+- Метод: `POST`
+- Требуется уровень не ниже порога `power_levels` (по умолчанию 100 — только владелец).
+
+Назначить уровень участнику (тело):
+
+```json
+{ "user_id": "@bob:example.com", "level": 50 }
+```
+
+`level`, равный `users_default`, удаляет пользователя из карты `users`. Пользователь
+должен быть активным участником (`membership = join`).
+
+Изменить пороги (тело):
+
+```json
+{ "thresholds": { "events_default": 50, "ban": 75 } }
+```
+
+Допустимые ключи: `events_default`, `invite`, `kick`, `ban`, `redact`,
+`state_default`, `power_levels`, `users_default`.
+
+Правила: нельзя назначить уровень выше своего; нельзя менять участника с уровнем ≥
+своего (кроме себя); нельзя поднять порог выше своего уровня.
+
+Успешный ответ: `{ "status": "ok" }`.
+
+Ошибки: `{ "error": "Insufficient power level" }`,
+`{ "error": "Cannot assign a level above your own" }`,
+`{ "error": "Cannot modify a user with an equal or higher level" }`,
+`{ "error": "Cannot set a threshold above your own level" }`,
+`{ "error": "User is not an active member of this room" }`.
+
+#### Пороги по умолчанию
+
+| Действие | Порог |
+|---|---|
+| отправка сообщений (`events_default`) | 0 |
+| приглашение (`invite`) | 0 |
+| кик (`kick`) | 50 |
+| бан / разбан (`ban`) | 50 |
+| удаление чужих сообщений (`redact`) | 50 |
+| изменение настроек комнаты (`state_default`) | 50 |
+| изменение прав (`power_levels`) | 100 |
+| создатель комнаты | 100 (несносимо) |
+
+При `events_default > 0` комната работает в режиме анонсов: писать могут только
+участники с достаточным уровнем.
+
 ---
 
 ### Обновление комнаты
@@ -501,10 +582,13 @@ GET /api/v1/sync/?since=1690000000
 
 Поля:
 
+- `name` (string) — отображаемое имя. Показывается в чате вместо `user_id`. Пустая строка сбрасывает имя (снова показывается `@login:domain`). Обрезается до 255 символов, HTML-теги вырезаются. При реальном изменении во все комнаты пользователя (`membership = join`) рассылается системное событие `m.room.member` с `content.rename = true`, `content.prev_displayname`, `content.displayname` и `content.cleared` (true при сбросе имени)
 - `avatar_url` (string) — URL аватара
 - `avatar` (file) — файл изображения (jpg, jpeg, png, gif, webp). Если передан, `avatar_url` игнорируется
 - `new_password` (string) — новый пароль
 - `old_password` (string) — текущий пароль (обязателен при смене пароля)
+
+При смене пароля (`new_password`) остальные поля в этом же запросе не обрабатываются — отправляйте их отдельным запросом.
 
 Успешный ответ:
 
@@ -531,6 +615,50 @@ GET /api/v1/sync/?since=1690000000
   "status": "ok"
 }
 ```
+
+---
+
+## Удаление профиля
+
+- URL: `/api/v1/deleteAccount/`
+- Метод: `POST`
+- Требуется авторизация
+
+Полностью удаляет профиль текущего пользователя. Требует подтверждения текущим паролем.
+
+Тело запроса (`application/json`):
+
+```json
+{
+  "password": "secret123"
+}
+```
+
+Удаляются: все токены доступа пользователя (все сессии завершаются), его членства
+в комнатах (`room_memberships`), записи присутствия (`user_presence`) и индикаторов
+набора (`typing_indicators`), а также строка в `users`.
+
+Файл аватара пользователя удаляется из `data/uploads/`.
+
+Комнаты, созданные пользователем, и его сообщения (`events` / `event_json`) **не
+удаляются** — такие комнаты остаются без владельца, история сообщений сохраняется.
+Файлы вложений в сообщениях также сохраняются.
+
+Успешный ответ:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+Ошибки:
+
+- `401` — `{"error": "Invalid token error"}`
+- `400` — `{"error": "Password is required"}`
+- `403` — `{"error": "Incorrect password"}`
+- `404` — `{"error": "User not found"}`
+- `405` — `{"error": "Method not allowed"}`
 
 ---
 

@@ -19,3 +19,5 @@ storage/*
 web/default/uploads/
 .vscode
 data/*
+.phpunit.cache/
+.phpunit.result.cache

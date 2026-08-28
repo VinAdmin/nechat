@@ -66,11 +66,18 @@ class SiteController extends \wco\kernel\Controller{
 
         $fileSize = filesize($filePath);
 
+        // "inline" разрешаем только для заведомо безопасных для отрисовки в браузере типов
+        // (картинки/видео/аудио/pdf из mimeMap). Любой другой тип — включая тот случай, когда
+        // реальное содержимое файла оказалось HTML/SVG/скриптом, — отдаём как вложение,
+        // чтобы браузер не мог выполнить его в origin приложения (хранимый XSS).
+        $safeInlineTypes = array_unique(array_values($this->mimeMap));
+        $disposition = in_array($mimeType, $safeInlineTypes, true) ? 'inline' : 'attachment';
+
         header('Content-Type: ' . $mimeType);
         header('Content-Length: ' . $fileSize);
         header('Accept-Ranges: bytes');
         header('X-Content-Type-Options: nosniff');
-        header('Content-Disposition: inline; filename="' . $fileName . '"');
+        header('Content-Disposition: ' . $disposition . '; filename="' . $fileName . '"');
 
         if (isset($_SERVER['HTTP_RANGE'])) {
             if (preg_match('/bytes=(\d+)-(\d+)?/', $_SERVER['HTTP_RANGE'], $matches)) {

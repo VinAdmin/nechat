@@ -82,6 +82,29 @@ class Events extends DB{
             return json_encode(["error" => "Room not found"]);
         }
 
+        // Отправлять сообщения (текст или файл) может только участник комнаты со статусом join.
+        // Проверяем это до обработки загрузки файла, чтобы не писать файл на диск от имени
+        // пользователя, у которого нет права публиковать сообщения в этой комнате.
+        $modelRoomMemberships = new RoomMemberships();
+        $modelRoomMemberships->select()->from()
+                ->where("room_id = :room_id AND user_id = :sender AND membership = 'join'");
+        $membership_res = $modelRoomMemberships->fetch([
+            'sender' => $sender,
+            'room_id' => $room['room_id'],
+        ]);
+        if (!$membership_res) {
+            http_response_code(403);
+            return json_encode(["error" => "Sending a message is prohibited"]);
+        }
+
+        // Announcement-режим: если порог events_default выше уровня отправителя — писать нельзя.
+        $levels = $mRooms->getPowerLevels($room['room_id']);
+        $senderLevel = PowerLevels::levelForUser($levels, $sender, $room['creator'] ?? '');
+        if ($senderLevel < PowerLevels::threshold($levels, 'events_default')) {
+            http_response_code(403);
+            return json_encode(["error" => "Sending a message is prohibited"]);
+        }
+
         // Тип сообщения: m.text (текст) или m.file (файл)
         $type = isset($data['msgtype']) ? strip_tags($data['msgtype']) : 'm.text';
         $body = isset($data['body']) ? strip_tags($data['body']) : '';
@@ -122,7 +145,6 @@ class Events extends DB{
         $chunkCount = isset($data['chunk_count']) ? (int)$data['chunk_count'] : 0;
         $chunkIndex = isset($data['chunk_index']) ? (int)$data['chunk_index'] : 0;
         $uploadId = isset($data['upload_id']) ? strip_tags($data['upload_id']) : null;
-        $fileSize = isset($data['file_size']) ? (int)$data['file_size'] : null;
 
         // Обработка загрузки файла
         if ($type === 'm.file' && !empty($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK) {
@@ -206,9 +228,8 @@ class Events extends DB{
                         $fileType = $audioMimes[$fileExt];
                     }
                 }
-                if ($fileSize === null) {
-                    $fileSize = filesize($destination);
-                }
+                // Размер всегда берём из реально записанного файла, а не из данных клиента
+                $fileSize = filesize($destination);
                 if (empty($body)) {
                     $body = $fileName;  // Имя файла как текст сообщения по умолчанию
                 }
@@ -243,9 +264,8 @@ class Events extends DB{
                         $fileType = $audioMimes[$fileExt];
                     }
                 }
-                if ($fileSize === null) {
-                    $fileSize = (int)$fileInfo['size'];
-                }
+                // Размер всегда берём из реально записанного файла, а не из данных клиента
+                $fileSize = filesize($destination);
 
                 if (empty($body)) {
                     $body = $fileName;
@@ -257,13 +277,13 @@ class Events extends DB{
             }
         }
 
-        // Проверка прав на отправку сообщений
+        // Проверка обязательных полей по типу сообщения (права на отправку уже проверены выше)
         if ($type === 'm.text') {
             if (empty($body)) {
                 http_response_code(401);
                 return json_encode(["error" => "Body error"]);
             }
-
+            
             // Запрещаем отправку забаненным и приглашённым (не вступившим) пользователям
             $modelRoomMemberships = new RoomMemberships();
             $modelRoomMemberships->select()->from()
@@ -307,10 +327,16 @@ class Events extends DB{
         $mUsers = new Users();
         $user = $mUsers->getUserById($sender);
 
+        // Отображаемое имя и аватар зашиваем в событие на момент отправки
+        // (денормализация): у $user уже есть строка из БД, лишнего запроса нет.
+        // Пустое name => показываем сам user_id (@login:domain).
+        $senderName = trim((string) ($user['name'] ?? ''));
+
         $content = [
             'body'       => $body,
             'room_id'    => $room['room_id'],
             'sender'     => $sender,
+            'displayname' => $senderName !== '' ? $senderName : $sender,
             'avatar_url' => $user['avatar_url'] ?? ''
         ];
 
@@ -324,6 +350,8 @@ class Events extends DB{
                 $repliedJson = json_decode($mReplied['json'], true);
                 if ($repliedJson) {
                     $replyToData['sender'] = $repliedJson['sender'] ?? '';
+                    // Имя автора цитируемого сообщения — актуальное на момент ответа.
+                    $replyToData['displayname'] = $mUsers->displayName($repliedJson['sender'] ?? '');
                     $replyToData['body'] = $repliedJson['content']['body'] ?? $repliedJson['content']['file_name'] ?? '';
                 }
             }
@@ -460,8 +488,8 @@ class Events extends DB{
 
         $mEventJson = new EventJson();
         
-        // Извлекаем отображаемое имя из user_id (убираем @ и :domain)
-        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $userId);
+        // Отображаемое имя приглашаемого: поле name, иначе сам user_id
+        $displayname = (new Users())->displayName($userId);
 
         $json = json_encode([
             'type'   => $type,
@@ -489,5 +517,90 @@ class Events extends DB{
         ]);
 
         return true;
+    }
+
+    /**
+     * Рассылает системное событие смены отображаемого имени пользователя во все
+     * комнаты, где он состоит со статусом join. Событие — m.room.member с
+     * пометкой content.rename = true; фронтенд рендерит его как системное
+     * сообщение «X сменил имя на Y».
+     *
+     * @param string $userId           чей профиль изменился (он же sender события)
+     * @param string $prevDisplayName   отображаемое имя ДО смены
+     * @param string $newDisplayName    отображаемое имя ПОСЛЕ смены (при очистке — сам user_id)
+     * @param bool   $cleared           true, если имя было очищено (возврат к логину)
+     * @return void
+     */
+    public function emitDisplayNameChange(string $userId, string $prevDisplayName, string $newDisplayName, bool $cleared): void {
+        // Только комнаты со статусом join: в invite/ban участник событие всё равно
+        // не должен получать, а членство при этом не меняется.
+        $roomIds = (new RoomMemberships())->getJoinedRoomIds($userId);
+        if (!$roomIds) {
+            return;
+        }
+
+        $mEventJson = new EventJson();
+
+        // Отдельное событие в каждую комнату — так его подхватит sync каждого
+        // участника этой комнаты (см. Events::sync: join по m.user_id зрителя).
+        foreach ($roomIds as $roomId) {
+            $eventId = $this->addEvent([
+                'type'    => 'm.room.member',
+                'room_id' => $roomId,
+                'sender'  => $userId,
+            ]);
+
+            $mEventJson->add([
+                'event_id' => $eventId,
+                'room_id'  => $roomId,
+                // membership=join, чтобы событие не влияло на вычисление членства;
+                // rename=true — маркер для фронтенда рендерить его как «сменил имя».
+                'json'     => json_encode([
+                    'type'   => 'm.room.member',
+                    'sender' => $userId,
+                    'content' => [
+                        'membership'       => 'join',
+                        'displayname'      => $newDisplayName,
+                        'prev_displayname' => $prevDisplayName,
+                        'rename'           => true,
+                        'cleared'          => $cleared,
+                    ],
+                ]),
+            ]);
+        }
+    }
+
+    /**
+     * Создаёт новое событие m.room.power_levels с полным набором уровней комнаты.
+     *
+     * Источник истины для прав комнаты — последнее событие этого типа
+     * (см. Rooms::getPowerLevels). Каждое изменение пишет полный content.
+     *
+     * @param string $roomId
+     * @param string $sender  инициатор изменения
+     * @param array  $content полный content события (уже смерженный вызывающим кодом)
+     * @return string event_id
+     */
+    public function setPowerLevels(string $roomId, string $sender, array $content): string {
+        $eventId = $this->addEvent([
+            'type'    => 'm.room.power_levels',
+            'room_id' => $roomId,
+            'sender'  => $sender,
+        ]);
+
+        $json = json_encode([
+            'type'    => 'm.room.power_levels',
+            'sender'  => $sender,
+            'content' => $content,
+        ]);
+
+        $mEventJson = new EventJson();
+        $mEventJson->add([
+            'event_id' => $eventId,
+            'room_id'  => $roomId,
+            'json'     => $json,
+        ]);
+
+        return $eventId;
     }
 }

@@ -3,6 +3,22 @@
  * @copyright (c) 2026, Olkhin Vitaliy
  **/
  
+/** Пороги уровней доступа комнаты по умолчанию (зеркало app\models\PowerLevels::DEFAULTS). */
+const POWER_DEFAULTS = {
+    users: {},
+    users_default: 0,
+    events_default: 0,
+    invite: 0,
+    kick: 50,
+    ban: 50,
+    redact: 50,
+    state_default: 50,
+    power_levels: 100,
+};
+
+/** Защёлка, чтобы принудительный логаут выполнялся один раз (несколько опросов могут словить 401 одновременно). */
+let forcedLogout = false;
+
 /**
  * Vue-приложение для управления интерфейсом чата и данными.
  */
@@ -24,6 +40,7 @@ const app = Vue.createApp({
             roomMembership: null,
             syncToken: "",
             roomMembers: [],
+            roomPowerLevels: {},
             fileName: '',
             previewImage: '',
             previewImageName: '',
@@ -38,17 +55,26 @@ const app = Vue.createApp({
             settingsAvatar: '',
             settingsJoinRule: 'public',
             settingsAvatarFile: null,
+            settingsEventsDefault: 0,
+            settingsInvite: 0,
+            settingsKick: 50,
+            settingsBan: 50,
+            settingsRedact: 50,
+            settingsStateDefault: 50,
             publicRooms: [],
             publicSearchQuery: '',
             publicSearchSearched: false,
             publicSearchLoading: false,
             showRooms: false,
             profileUserId: '',
+            profileName: '',
+            profileNameOriginal: '',
             profileAvatar: '',
             profileOldPassword: '',
             profilePassword: '',
             profileToken: '',
             profileAvatarFile: null,
+            deleteAccountPassword: '',
             voiceRecording: false,
             voiceMediaRecorder: null,
             voiceChunks: [],
@@ -129,11 +155,15 @@ const app = Vue.createApp({
                 }
             });
 
+            if (res.status === 401 || res.status === 403) {
+                this.forceLogout('Сессия завершена, войдите заново');
+                return;
+            }
+
             const data = await res.json();
 
             if (data.error) {
-                notify(data.error, 'warning', 4000);
-                window.location.href = '/';
+                this.forceLogout(data.error);
                 return;
             }
 
@@ -180,6 +210,7 @@ const app = Vue.createApp({
             this.unreadCounts[room.room_id] = 0;
 
             this.updateMessages();
+            this.fetchPowerLevels(room.room_id);
         },
         
         /**
@@ -319,6 +350,11 @@ const app = Vue.createApp({
                 return;
             }
 
+            if (res.status === 401 || res.status === 403) {
+                this.forceLogout('Сессия завершена, войдите заново');
+                return;
+            }
+
             if (!res.ok) {
                 if (!this.syncFailed) {
                     this.syncFailed = true;
@@ -328,12 +364,9 @@ const app = Vue.createApp({
             }
 
             const data = await res.json();
-            
+
             if (data.error) {
-                notify(data.error, 'warning', 5000);
-                localStorage.clear();
-                sessionStorage.clear();
-                window.location.href = '/';
+                this.forceLogout(data.error);
                 return;
             }
 
@@ -354,6 +387,14 @@ const app = Vue.createApp({
                 let newEvents = 0;
                 for(const event of events){
                     if (!event?.event_id) continue;
+
+                    if (event.type === 'm.room.power_levels') {
+                        const content = event.json?.content;
+                        if (content) {
+                            this.roomPowerLevels[roomId] = content;
+                        }
+                        continue; // не показываем в ленте сообщений
+                    }
 
                     if (event.type === 'm.room.redaction') {
                         const redacts = event.json?.content?.redacts;
@@ -378,13 +419,14 @@ const app = Vue.createApp({
                         const lastEvent = events[events.length - 1];
                         const room = this.rooms.find(r => r.room_id === roomId);
                         const sender = lastEvent?.json?.content?.sender || '';
+                        const senderLabel = this.displayName(lastEvent?.json?.content?.displayname, sender);
                         const body = lastEvent?.json?.content?.body || '';
                         const roomName = room?.name || roomId;
-                        this.notifyBrowser(roomName, sender, body);
+                        this.notifyBrowser(roomName, senderLabel, body);
                         if (sender && sender !== localStorage.getItem('user_id')) {
                             this.playNotificationSound();
                             if (body) {
-                                notify(roomName + ': ' + sender, 'info', 4000);
+                                notify(roomName + ': ' + senderLabel, 'info', 4000);
                             }
                         }
                     }
@@ -412,6 +454,12 @@ const app = Vue.createApp({
             this.saveCache();
             this.updateMessages();
             this.checkVersion();
+
+            // Подстраховка: если по открытой комнате нет уровней доступа
+            // (событие m.room.power_levels старше since и не пришло в этот sync) — дозагружаем.
+            if (this.roomId && !this.roomPowerLevels[this.roomId]) {
+                this.fetchPowerLevels(this.roomId);
+            }
         },
 
         async checkVersion() {
@@ -515,6 +563,7 @@ const app = Vue.createApp({
                 }
 
                 this.updateMessages();
+                this.fetchPowerLevels(id);
             }
         },
 
@@ -893,8 +942,33 @@ const app = Vue.createApp({
             this.replyTo = {
                 event_id: msg.event_id,
                 sender: msg.json?.content?.sender || '',
+                displayname: msg.json?.content?.displayname || '',
                 body: msg.json?.content?.body || msg.json?.content?.file_name || ''
             };
+        },
+
+        /**
+         * Отображаемое имя: заполненное имя пользователя, иначе — сам user_id
+         * (fallback вида @login:domain). Старые события без displayname в content
+         * дают пустое name → показываем sender.
+         * @param {string} name
+         * @param {string} userId
+         * @returns {string}
+         */
+        displayName(name, userId) {
+            const n = (name || '').trim();
+            return n !== '' ? n : (userId || '');
+        },
+
+        /**
+         * Буква-заглушка для аватара отправителя сообщения.
+         * @param {object} msg
+         * @returns {string}
+         */
+        senderInitial(msg) {
+            const label = this.displayName(msg.json?.content?.displayname, msg.json?.content?.sender);
+            const ch = label.replace(/^@/, '').charAt(0);
+            return ch ? ch.toUpperCase() : '?';
         },
 
         cancelReply() {
@@ -985,6 +1059,90 @@ const app = Vue.createApp({
             return room?.creator === uid;
         },
 
+        /**
+         * Актуальные пороги уровней доступа комнаты (с дефолтами).
+         * @param {string} roomId
+         * @returns {object}
+         */
+        roomLevels(roomId) {
+            return Object.assign({}, POWER_DEFAULTS, this.roomPowerLevels[roomId] || {});
+        },
+
+        /**
+         * Эффективный уровень текущего пользователя в комнате.
+         * @param {string} roomId
+         * @returns {number}
+         */
+        myLevel(roomId) {
+            const uid = localStorage.getItem('user_id');
+            const lv = this.roomLevels(roomId);
+            const room = this.rooms.find(r => r.room_id === roomId);
+            if (room && room.creator === uid) {
+                return Math.max(100, (lv.users && lv.users[uid]) || 100);
+            }
+            if (lv.users && Object.prototype.hasOwnProperty.call(lv.users, uid)) {
+                return lv.users[uid];
+            }
+            return lv.users_default || 0;
+        },
+
+        /**
+         * Хватает ли текущему пользователю уровня для действия.
+         * @param {string} action  events_default|invite|kick|ban|unban|redact|state_default|power_levels
+         * @param {string} [roomId]
+         * @returns {boolean}
+         */
+        can(action, roomId) {
+            roomId = roomId || this.roomId;
+            if (!roomId) return false;
+            const key = action === 'unban' ? 'ban' : action;
+            const lv = this.roomLevels(roomId);
+            return this.myLevel(roomId) >= (lv[key] ?? 100);
+        },
+
+        /**
+         * Может ли текущий пользователь писать в открытую комнату (announcement-режим).
+         * @returns {boolean}
+         */
+        canPost() {
+            if (!this.roomId) return true;
+            const lv = this.roomLevels(this.roomId);
+            return this.myLevel(this.roomId) >= (lv.events_default || 0);
+        },
+
+        /**
+         * Человекочитаемая метка уровня доступа.
+         * @param {number} level
+         * @returns {string}
+         */
+        powerLabel(level) {
+            level = Number(level) || 0;
+            if (level >= 100) return 'Владелец';
+            if (level >= 50) return 'Модератор';
+            return 'Участник';
+        },
+
+        /**
+         * Загружает пороги уровней доступа комнаты с сервера.
+         * @param {string} roomId
+         * @returns {Promise<void>}
+         */
+        async fetchPowerLevels(roomId) {
+            if (!roomId) return;
+            const token = localStorage.getItem('token');
+            try {
+                const res = await fetch('/api/v1/rooms/' + roomId + '/power_levels/', {
+                    headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' }
+                });
+                const result = await res.json();
+                if (result && result.power_levels) {
+                    this.roomPowerLevels[roomId] = result.power_levels;
+                }
+            } catch (e) {
+                // мягкая деградация — остаются дефолты POWER_DEFAULTS
+            }
+        },
+
         isOwnMessage(msg) {
             const currentUser = localStorage.getItem('user_id');
             const sender = msg.json?.content?.sender || null;
@@ -1070,6 +1228,7 @@ const app = Vue.createApp({
             }
             
             this.roomMembers = result;
+            await this.fetchPowerLevels(room_id);
         },
 
         /**
@@ -1231,10 +1390,9 @@ const app = Vue.createApp({
          */
         async ban(userId) {
             const token = localStorage.getItem('token');
-            const currentUser = localStorage.getItem('user_id');
 
-            if (this.roomCreator !== currentUser) {
-                notify('Только владелец комнаты может банить пользователей', 'warning', 5000);
+            if (!this.can('ban')) {
+                notify('Недостаточно прав для этого действия', 'warning', 5000);
                 return;
             }
 
@@ -1292,10 +1450,9 @@ const app = Vue.createApp({
 
         async unban(userId) {
             const token = localStorage.getItem('token');
-            const currentUser = localStorage.getItem('user_id');
 
-            if (this.roomCreator !== currentUser) {
-                notify('Только владелец комнаты может снимать бан', 'warning', 5000);
+            if (!this.can('unban')) {
+                notify('Недостаточно прав для этого действия', 'warning', 5000);
                 return;
             }
 
@@ -1327,10 +1484,9 @@ const app = Vue.createApp({
          */
         async kick(userId) {
             const token = localStorage.getItem('token');
-            const currentUser = localStorage.getItem('user_id');
 
-            if (this.roomCreator !== currentUser) {
-                notify('Только владелец комнаты может выгонять пользователей', 'warning', 5000);
+            if (!this.can('kick')) {
+                notify('Недостаточно прав для этого действия', 'warning', 5000);
                 return;
             }
 
@@ -1352,6 +1508,26 @@ const app = Vue.createApp({
 
             notify('Пользователь выгнан из комнаты', 'success', 4000);
             this.openMembers(this.roomId);
+        },
+
+        /**
+         * Назначает участнику уровень доступа.
+         * @param {string} userId
+         * @param {number|string} level
+         * @returns {Promise<void>}
+         */
+        async setMemberLevel(userId, level) {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/v1/rooms/' + this.roomId + '/power_levels/', {
+                method: 'POST',
+                headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, level: Number(level) })
+            });
+            const result = await res.json();
+            if (result.error) { notify(result.error, 'warning', 5000); return; }
+            notify('Уровень доступа обновлён', 'success', 3000);
+            await this.fetchPowerLevels(this.roomId);
+            await this.openMembers(this.roomId);
         },
 
         /**
@@ -1418,6 +1594,7 @@ const app = Vue.createApp({
             const token = localStorage.getItem('token');
             this.profileToken = token;
             this.profilePassword = '';
+            this.profileOldPassword = '';
             this.profileAvatarFile = null;
 
             const res = await fetch('/api/v1/profile/', {
@@ -1431,9 +1608,12 @@ const app = Vue.createApp({
             if (!result.error) {
                 this.profileUserId = result.user_id || localStorage.getItem('user_id');
                 this.profileAvatar = result.avatar_url || '';
+                this.profileName = result.name || '';
             } else {
                 this.profileUserId = localStorage.getItem('user_id');
+                this.profileName = '';
             }
+            this.profileNameOriginal = this.profileName;
         },
 
         /**
@@ -1520,9 +1700,47 @@ const app = Vue.createApp({
                 }
             }
 
-            if (!this.profilePassword && !this.profileAvatarFile) {
+            const nameChanged = this.profileName.trim() !== this.profileNameOriginal.trim();
+            if (nameChanged) {
+                const res = await fetch('/api/v1/profile/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: this.profileName.trim() })
+                });
+
+                const result = await res.json();
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
+
+                this.profileName = this.profileName.trim();
+                this.profileNameOriginal = this.profileName;
+                notify('Имя сохранено', 'success', 3000);
+            }
+
+            if (!this.profilePassword && !this.profileAvatarFile && !nameChanged) {
                 notify('Нет изменений для сохранения', 'info', 3000);
             }
+        },
+
+        /**
+         * Принудительно завершает сессию на клиенте, когда сервер отверг токен
+         * (удалён из БД, отозван и т.п.): чистит localStorage, sessionStorage,
+         * cookie с токеном и уводит на страницу входа.
+         * @param {string} [msg] Текст уведомления для пользователя.
+         */
+        forceLogout(msg) {
+            if (forcedLogout) return;
+            forcedLogout = true;
+            notify(msg || 'Сессия завершена, войдите заново', 'warning', 5000);
+            localStorage.clear();
+            sessionStorage.clear();
+            document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
+            window.location.href = '/';
         },
 
         /**
@@ -1546,6 +1764,50 @@ const app = Vue.createApp({
         },
 
         /**
+         * Закрывает окно профиля и открывает подтверждение удаления профиля.
+         */
+        deleteAccount() {
+            this.deleteAccountPassword = '';
+            bootstrap.Modal.getInstance(document.getElementById('profileModal'))?.hide();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteAccountConfirmModal')).show();
+        },
+
+        /**
+         * Удаляет профиль пользователя после подтверждения паролем.
+         * @returns {Promise<void>}
+         */
+        async confirmDeleteAccount() {
+            if (!this.deleteAccountPassword) {
+                notify('Введите текущий пароль', 'warning', 3000);
+                return;
+            }
+
+            const token = localStorage.getItem('token');
+
+            const res = await fetch('/api/v1/deleteAccount/', {
+                method: 'POST',
+                headers: {
+                    "Authorization": "Bearer " + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ password: this.deleteAccountPassword })
+            });
+
+            const result = await res.json();
+
+            if (result.error) {
+                notify(result.error, 'warning', 5000);
+                return;
+            }
+
+            bootstrap.Modal.getInstance(document.getElementById('deleteAccountConfirmModal'))?.hide();
+            this.deleteAccountPassword = '';
+            localStorage.clear();
+            document.cookie = 'token=; path=/; max-age=0; SameSite=Lax';
+            window.location.href = '/';
+        },
+
+        /**
          * Открывает модальное окно настроек комнаты.
          * Заполняет поля текущими значениями.
          */
@@ -1555,6 +1817,14 @@ const app = Vue.createApp({
             this.settingsAvatar = this.roomAvatar;
             this.settingsJoinRule = this.roomJoinRule;
             this.settingsAvatarFile = null;
+
+            const lv = this.roomLevels(this.roomId);
+            this.settingsEventsDefault = lv.events_default;
+            this.settingsInvite = lv.invite;
+            this.settingsKick = lv.kick;
+            this.settingsBan = lv.ban;
+            this.settingsRedact = lv.redact;
+            this.settingsStateDefault = lv.state_default;
         },
 
         /**
@@ -1628,6 +1898,28 @@ const app = Vue.createApp({
             if (result.error) {
                 notify(result.error, 'warning', 5000);
                 return;
+            }
+
+            // Пороги уровней доступа сохраняем тем же действием (если есть право).
+            if (this.can('power_levels')) {
+                const plRes = await fetch('/api/v1/rooms/' + this.roomId + '/power_levels/', {
+                    method: 'POST',
+                    headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thresholds: {
+                        events_default: Number(this.settingsEventsDefault),
+                        invite: Number(this.settingsInvite),
+                        kick: Number(this.settingsKick),
+                        ban: Number(this.settingsBan),
+                        redact: Number(this.settingsRedact),
+                        state_default: Number(this.settingsStateDefault)
+                    }})
+                });
+                const plResult = await plRes.json();
+                if (plResult.error) {
+                    notify(plResult.error, 'warning', 5000);
+                    return;
+                }
+                await this.fetchPowerLevels(this.roomId);
             }
 
             notify('Настройки сохранены', 'success', 3000);
@@ -1932,8 +2224,9 @@ const app = Vue.createApp({
             this.roomId = roomId;
             this.roomName = localStorage.getItem('room_name');
             this.updateMessages();
+            this.fetchPowerLevels(roomId);
         }
-        
+
         document.getElementById('formInvite')
             .addEventListener('submit', this.invite);
 

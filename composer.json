@@ -14,6 +14,11 @@
             "app\\": ""
         }
     },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
     "repositories": [
     ],
     "require": {
@@ -22,5 +27,13 @@
         "robmorgan/phinx": "0.12.11",
         "firebase/php-jwt": "v7.0.5",
         "ramsey/uuid": "5.x-dev"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.4@dev"
+    },
+    "scripts": {
+        "test": "phpunit --testdox",
+        "test:unit": "phpunit --testdox --testsuite Unit",
+        "test:functional": "phpunit --testdox --testsuite Functional"
     }
 }
