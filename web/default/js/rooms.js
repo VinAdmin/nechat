@@ -64,6 +64,8 @@ const app = Vue.createApp({
             publicSearchLoading: false,
             showRooms: false,
             profileUserId: '',
+            profileName: '',
+            profileNameOriginal: '',
             profileAvatar: '',
             profileOldPassword: '',
             profilePassword: '',
@@ -408,13 +410,14 @@ const app = Vue.createApp({
                         const lastEvent = events[events.length - 1];
                         const room = this.rooms.find(r => r.room_id === roomId);
                         const sender = lastEvent?.json?.content?.sender || '';
+                        const senderLabel = this.displayName(lastEvent?.json?.content?.displayname, sender);
                         const body = lastEvent?.json?.content?.body || '';
                         const roomName = room?.name || roomId;
-                        this.notifyBrowser(roomName, sender, body);
+                        this.notifyBrowser(roomName, senderLabel, body);
                         if (sender && sender !== localStorage.getItem('user_id')) {
                             this.playNotificationSound();
                             if (body) {
-                                notify(roomName + ': ' + sender, 'info', 4000);
+                                notify(roomName + ': ' + senderLabel, 'info', 4000);
                             }
                         }
                     }
@@ -930,8 +933,33 @@ const app = Vue.createApp({
             this.replyTo = {
                 event_id: msg.event_id,
                 sender: msg.json?.content?.sender || '',
+                displayname: msg.json?.content?.displayname || '',
                 body: msg.json?.content?.body || msg.json?.content?.file_name || ''
             };
+        },
+
+        /**
+         * Отображаемое имя: заполненное имя пользователя, иначе — сам user_id
+         * (fallback вида @login:domain). Старые события без displayname в content
+         * дают пустое name → показываем sender.
+         * @param {string} name
+         * @param {string} userId
+         * @returns {string}
+         */
+        displayName(name, userId) {
+            const n = (name || '').trim();
+            return n !== '' ? n : (userId || '');
+        },
+
+        /**
+         * Буква-заглушка для аватара отправителя сообщения.
+         * @param {object} msg
+         * @returns {string}
+         */
+        senderInitial(msg) {
+            const label = this.displayName(msg.json?.content?.displayname, msg.json?.content?.sender);
+            const ch = label.replace(/^@/, '').charAt(0);
+            return ch ? ch.toUpperCase() : '?';
         },
 
         cancelReply() {
@@ -1557,6 +1585,7 @@ const app = Vue.createApp({
             const token = localStorage.getItem('token');
             this.profileToken = token;
             this.profilePassword = '';
+            this.profileOldPassword = '';
             this.profileAvatarFile = null;
 
             const res = await fetch('/api/v1/profile/', {
@@ -1570,9 +1599,12 @@ const app = Vue.createApp({
             if (!result.error) {
                 this.profileUserId = result.user_id || localStorage.getItem('user_id');
                 this.profileAvatar = result.avatar_url || '';
+                this.profileName = result.name || '';
             } else {
                 this.profileUserId = localStorage.getItem('user_id');
+                this.profileName = '';
             }
+            this.profileNameOriginal = this.profileName;
         },
 
         /**
@@ -1659,7 +1691,29 @@ const app = Vue.createApp({
                 }
             }
 
-            if (!this.profilePassword && !this.profileAvatarFile) {
+            const nameChanged = this.profileName.trim() !== this.profileNameOriginal.trim();
+            if (nameChanged) {
+                const res = await fetch('/api/v1/profile/', {
+                    method: 'POST',
+                    headers: {
+                        "Authorization": "Bearer " + token,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ name: this.profileName.trim() })
+                });
+
+                const result = await res.json();
+                if (result.error) {
+                    notify(result.error, 'warning', 5000);
+                    return;
+                }
+
+                this.profileName = this.profileName.trim();
+                this.profileNameOriginal = this.profileName;
+                notify('Имя сохранено', 'success', 3000);
+            }
+
+            if (!this.profilePassword && !this.profileAvatarFile && !nameChanged) {
                 notify('Нет изменений для сохранения', 'info', 3000);
             }
         },

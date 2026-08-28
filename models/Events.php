@@ -301,10 +301,16 @@ class Events extends DB{
         $mUsers = new Users();
         $user = $mUsers->getUserById($sender);
 
+        // Отображаемое имя и аватар зашиваем в событие на момент отправки
+        // (денормализация): у $user уже есть строка из БД, лишнего запроса нет.
+        // Пустое name => показываем сам user_id (@login:domain).
+        $senderName = trim((string) ($user['name'] ?? ''));
+
         $content = [
             'body'       => $body,
             'room_id'    => $room['room_id'],
             'sender'     => $sender,
+            'displayname' => $senderName !== '' ? $senderName : $sender,
             'avatar_url' => $user['avatar_url'] ?? ''
         ];
 
@@ -318,6 +324,8 @@ class Events extends DB{
                 $repliedJson = json_decode($mReplied['json'], true);
                 if ($repliedJson) {
                     $replyToData['sender'] = $repliedJson['sender'] ?? '';
+                    // Имя автора цитируемого сообщения — актуальное на момент ответа.
+                    $replyToData['displayname'] = $mUsers->displayName($repliedJson['sender'] ?? '');
                     $replyToData['body'] = $repliedJson['content']['body'] ?? $repliedJson['content']['file_name'] ?? '';
                 }
             }
@@ -454,8 +462,8 @@ class Events extends DB{
 
         $mEventJson = new EventJson();
         
-        // Извлекаем отображаемое имя из user_id (убираем @ и :domain)
-        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $userId);
+        // Отображаемое имя приглашаемого: поле name, иначе сам user_id
+        $displayname = (new Users())->displayName($userId);
 
         $json = json_encode([
             'type'   => $type,
@@ -483,6 +491,57 @@ class Events extends DB{
         ]);
 
         return true;
+    }
+
+    /**
+     * Рассылает системное событие смены отображаемого имени пользователя во все
+     * комнаты, где он состоит со статусом join. Событие — m.room.member с
+     * пометкой content.rename = true; фронтенд рендерит его как системное
+     * сообщение «X сменил имя на Y».
+     *
+     * @param string $userId           чей профиль изменился (он же sender события)
+     * @param string $prevDisplayName   отображаемое имя ДО смены
+     * @param string $newDisplayName    отображаемое имя ПОСЛЕ смены (при очистке — сам user_id)
+     * @param bool   $cleared           true, если имя было очищено (возврат к логину)
+     * @return void
+     */
+    public function emitDisplayNameChange(string $userId, string $prevDisplayName, string $newDisplayName, bool $cleared): void {
+        // Только комнаты со статусом join: в invite/ban участник событие всё равно
+        // не должен получать, а членство при этом не меняется.
+        $roomIds = (new RoomMemberships())->getJoinedRoomIds($userId);
+        if (!$roomIds) {
+            return;
+        }
+
+        $mEventJson = new EventJson();
+
+        // Отдельное событие в каждую комнату — так его подхватит sync каждого
+        // участника этой комнаты (см. Events::sync: join по m.user_id зрителя).
+        foreach ($roomIds as $roomId) {
+            $eventId = $this->addEvent([
+                'type'    => 'm.room.member',
+                'room_id' => $roomId,
+                'sender'  => $userId,
+            ]);
+
+            $mEventJson->add([
+                'event_id' => $eventId,
+                'room_id'  => $roomId,
+                // membership=join, чтобы событие не влияло на вычисление членства;
+                // rename=true — маркер для фронтенда рендерить его как «сменил имя».
+                'json'     => json_encode([
+                    'type'   => 'm.room.member',
+                    'sender' => $userId,
+                    'content' => [
+                        'membership'       => 'join',
+                        'displayname'      => $newDisplayName,
+                        'prev_displayname' => $prevDisplayName,
+                        'rename'           => true,
+                        'cleared'          => $cleared,
+                    ],
+                ]),
+            ]);
+        }
     }
 
     /**

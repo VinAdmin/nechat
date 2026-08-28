@@ -245,7 +245,8 @@ class Rooms extends DB{
             'sender'  => $sender
         ]);
 
-        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $sender);
+        // Отображаемое имя вступившего: поле name, иначе сам user_id.
+        $displayname = (new Users())->displayName($sender);
 
         $json = json_encode([
             'type'   => 'm.room.member',

@@ -66,8 +66,11 @@ class RoomMemberships extends DB{
      * @return array Список записей членства
      */
     public function getRoomMembers(string $room_id): array {
-        $this->select()->from()
-                ->where("room_id = :room_id");
+        // LEFT JOIN users — чтобы в списке участников показывать актуальное
+        // отображаемое имя (users.name), а не только user_id.
+        $this->select("t1.*, u.name")->from()
+                ->joinLeft(['u' => 'users'], "u.user_id = t1.user_id")
+                ->where("t1.room_id = :room_id");
 
         $res = $this->fetchAll(['room_id' => $room_id]);
 
@@ -78,6 +81,21 @@ class RoomMemberships extends DB{
         return $res;
     }
     
+    /**
+     * Возвращает список room_id, где пользователь состоит со статусом join.
+     *
+     * @param string $userId
+     * @return string[] Массив идентификаторов комнат (может быть пустым)
+     */
+    public function getJoinedRoomIds(string $userId): array {
+        $this->select("t1.room_id")->from()
+                ->where("user_id = :user_id AND membership = 'join'");
+
+        $res = $this->fetchAll(['user_id' => $userId]);
+
+        return array_column($res ?: [], 'room_id');
+    }
+
     /**
      * Возвращает запись участника комнаты по room_id и user_id.
      *

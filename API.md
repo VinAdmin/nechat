@@ -582,10 +582,13 @@ GET /api/v1/sync/?since=1690000000
 
 Поля:
 
+- `name` (string) — отображаемое имя. Показывается в чате вместо `user_id`. Пустая строка сбрасывает имя (снова показывается `@login:domain`). Обрезается до 255 символов, HTML-теги вырезаются. При реальном изменении во все комнаты пользователя (`membership = join`) рассылается системное событие `m.room.member` с `content.rename = true`, `content.prev_displayname`, `content.displayname` и `content.cleared` (true при сбросе имени)
 - `avatar_url` (string) — URL аватара
 - `avatar` (file) — файл изображения (jpg, jpeg, png, gif, webp). Если передан, `avatar_url` игнорируется
 - `new_password` (string) — новый пароль
 - `old_password` (string) — текущий пароль (обязателен при смене пароля)
+
+При смене пароля (`new_password`) остальные поля в этом же запросе не обрабатываются — отправляйте их отдельным запросом.
 
 Успешный ответ:
 

@@ -54,7 +54,7 @@ $config_db = [
 ```sql
 CREATE TABLE users (
     user_id VARCHAR(255) PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
+    name VARCHAR(255) DEFAULT NULL,          -- отображаемое имя; NULL/пусто => показываем user_id
     password VARCHAR(255) NOT NULL,
     avatar_url VARCHAR(500) DEFAULT NULL
 );

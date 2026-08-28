@@ -220,9 +220,19 @@ class V1Controller extends \wco\kernel\Controller{
                 return true;
             }
 
-            echo $mUsers->updateProfile($mAccesToken->sender, [
-                'avatar_url' => $avatarUrl
-            ]);
+            // Собираем только реально переданные поля.
+            // avatar_url кладём лишь непустым: запрос со сменой одного имени
+            // не должен затирать уже загруженный аватар пустой строкой.
+            // Для name важен сам факт наличия ключа — пустая строка = сброс имени.
+            $profileUpdate = [];
+            if($avatarUrl !== ''){
+                $profileUpdate['avatar_url'] = $avatarUrl;
+            }
+            if(array_key_exists('name', $data)){
+                $profileUpdate['name'] = (string) $data['name'];
+            }
+
+            echo $mUsers->updateProfile($mAccesToken->sender, $profileUpdate);
             return true;
         }
 
@@ -589,7 +599,8 @@ class V1Controller extends \wco\kernel\Controller{
             'sender'  => $params['sender']
         ]);
 
-        $displayname = str_replace(['@', ':'.WCO::$domain], ['', ''], $params['sender']);
+        // Отображаемое имя вступившего: поле name, иначе сам user_id.
+        $displayname = (new Users())->displayName($params['sender']);
 
         $json = json_encode([
             'type'   => 'm.room.member',
@@ -1270,7 +1281,8 @@ class V1Controller extends \wco\kernel\Controller{
             'sender'  => $senderId
         ]);
 
-        $displayname1 = str_replace(['@', ':' . WCO::$domain], ['', ''], $senderId);
+        // Отображаемые имена обоих участников личной комнаты (name или user_id).
+        $displayname1 = (new Users())->displayName($senderId);
         $mEventJson->add([
             'event_id' => $eventId1,
             'room_id'  => $roomId,
@@ -1295,7 +1307,7 @@ class V1Controller extends \wco\kernel\Controller{
             'sender'  => $senderId
         ]);
 
-        $displayname2 = str_replace(['@', ':' . WCO::$domain], ['', ''], $targetUserId);
+        $displayname2 = (new Users())->displayName($targetUserId);
         $mEventJson->add([
             'event_id' => $eventId2,
             'room_id'  => $roomId,

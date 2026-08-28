@@ -103,7 +103,15 @@ $fInvite = new Form();
                 <div class="list" ref="messages">
                 <div v-for="(msg, index) in messages" :key="msg.event_id">
                     <div v-if="showDateSeparator(msg, index)" class="msg-date-separator">{{ msgDate(msg) }}</div>
-                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" class="msg-system">
+                    <!-- Событие смены отображаемого имени (Events::emitDisplayNameChange).
+                         content.rename=true; при content.cleared имя сброшено к логину.
+                         Ветка идёт ДО обычной "join", т.к. у события membership тоже 'join'. -->
+                    <div v-if="msg.type === 'm.room.member' && msg.json?.content?.rename" class="msg-system">
+                        <span class="msg-system-text" v-if="msg.json.content.cleared">{{ msg.json.content.prev_displayname }} вернул(а) логин</span>
+                        <span class="msg-system-text" v-else>{{ msg.json.content.prev_displayname }} сменил(а) имя на {{ msg.json.content.displayname }}</span>
+                        <span class="msg-system-time">{{ formatTime(msg) }}</span>
+                    </div>
+                    <div v-else-if="msg.type === 'm.room.member' && msg.json?.content?.membership === 'join'" class="msg-system">
                         <span class="msg-system-text">{{ msg.json.content.displayname || msg.json.sender }} присоединился</span>
                         <span class="msg-system-time">{{ formatTime(msg) }}</span>
                     </div>
@@ -119,13 +127,13 @@ $fInvite = new Form();
                     <div v-else :data-event-id="msg.event_id" :class="['msg', isOwnMessage(msg) ? 'msg-own' : 'msg-other']">
                         <div v-if="!isOwnMessage(msg)" class="msg-avatar">
                             <img v-if="msg.json?.content?.avatar_url && !isSameSender(index)" :src="msg.json.content.avatar_url" class="msg-avatar-img" alt="" />
-                            <span v-else-if="!isSameSender(index)" class="msg-avatar-placeholder">{{ (msg.json?.content?.sender || '?').charAt(1).toUpperCase() }}</span>
+                            <span v-else-if="!isSameSender(index)" class="msg-avatar-placeholder">{{ senderInitial(msg) }}</span>
                         </div>
                         <div class="msg-content-wrap">
-                        <div v-if="!isSameSender(index) && !isOwnMessage(msg) && msg.json?.content?.sender" class="msg-sender-label">{{ msg.json.content.sender }}</div>
+                        <div v-if="!isSameSender(index) && !isOwnMessage(msg) && msg.json?.content?.sender" class="msg-sender-label">{{ displayName(msg.json.content.displayname, msg.json.content.sender) }}</div>
                         <div class="msg-bubble" :class="{ 'msg-has-reply': msg.json?.content?.reply_to }">
                             <div v-if="msg.json?.content?.reply_to" class="reply-context" @click="scrollToMessage(msg.json.content.reply_to.event_id)">
-                                <div class="reply-context-sender">{{ msg.json.content.reply_to.sender || '?' }}</div>
+                                <div class="reply-context-sender">{{ displayName(msg.json.content.reply_to.displayname, msg.json.content.reply_to.sender) || '?' }}</div>
                                 <div class="reply-context-body">{{ msg.json.content.reply_to.body || '...' }}</div>
                             </div>
                             <div v-if="msg.json?.content?.file_url">
@@ -177,7 +185,7 @@ $fInvite = new Form();
                     <div v-if="!searchLoading && searchResults.length === 0 && searchQuery.length > 0" class="search-empty">Ничего не найдено</div>
                     <div v-if="searchResults.length > 0" class="search-results">
                         <div v-for="r in searchResults" :key="r.event_id" class="search-result-item" @click="scrollToMessage(r.event_id)">
-                            <span class="search-result-sender">{{ r.json?.sender }}</span>
+                            <span class="search-result-sender">{{ displayName(r.json?.content?.displayname, r.json?.sender) }}</span>
                             <span class="search-result-body">{{ r.json?.content?.body }}</span>
                         </div>
                     </div>
@@ -196,7 +204,7 @@ $fInvite = new Form();
                 <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
                 <div class="messageComposer" v-show="roomId && roomMembership === 'join' && canPost()">
                     <div v-if="replyTo" class="reply-indicator">
-                        <span class="reply-indicator-text">Ответ {{ replyTo.sender }}: {{ replyTo.body }}</span>
+                        <span class="reply-indicator-text">Ответ {{ displayName(replyTo.displayname, replyTo.sender) }}: {{ replyTo.body }}</span>
                         <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelReply" aria-label="Отменить"></button>
                     </div>
                     <div v-if="editingMessage" class="reply-indicator edit-indicator" style="border-color: rgba(255,200,0,0.3);">
@@ -387,23 +395,27 @@ $fInvite = new Form();
                         <div v-else class="profile-avatar-preview profile-avatar-placeholder">{{ (profileUserId || '?').charAt(1).toUpperCase() }}</div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">ID</label>
+                        <label class="form-label">ID</label>
                         <input type="text" class="form-control" :value="profileUserId" readonly />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Аватар</label>
+                        <label class="form-label">Имя</label>
+                        <input type="text" class="form-control" v-model="profileName" maxlength="255" placeholder="Показывать вместо логина" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Аватар</label>
                         <input type="file" accept="image/*" @change="onProfileAvatarChange" class="form-control" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Старый пароль</label>
+                        <label class="form-label">Старый пароль</label>
                         <input type="password" v-model="profileOldPassword" class="form-control" placeholder="Введите текущий пароль" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Новый пароль</label>
+                        <label class="form-label">Новый пароль</label>
                         <input type="password" v-model="profilePassword" class="form-control" placeholder="Оставьте пустым, если не хотите менять" />
                     </div>
                     <div class="mb-3">
-                        <label class="form-label text-white">Токен доступа</label>
+                        <label class="form-label">Токен доступа</label>
                         <div class="input-group">
                             <input type="text" class="form-control" :value="profileToken" readonly id="tokenField" />
                             <button class="btn btn-outline-secondary" @click="copyToken" title="Копировать">📋</button>
@@ -518,7 +530,7 @@ $fInvite = new Form();
                         <div v-for="member in roomMembers" class="list-group-item list-group-item-action list-group-item-primary d-flex justify-content-between align-items-center">
                             <span>
                                 <span v-if="isOnline(member.user_id)" class="online-dot-inline"></span>
-                                {{ member.user_id }}
+                                {{ displayName(member.name, member.user_id) }}
                                 <span class="power-badge" :title="'Уровень доступа: ' + (member.power_level ?? 0)">{{ powerLabel(member.power_level) }}</span>
                                 <span v-if="member.membership === 'ban'" class="badge bg-danger ms-2">Забанен</span>
                             </span>
