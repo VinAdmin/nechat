@@ -389,6 +389,87 @@ GET /api/v1/sync/?since=1690000000
 
 ---
 
+### Права доступа комнаты (power levels)
+
+Права комнаты — числовые уровни в духе Matrix. Актуальное состояние хранится как
+последнее событие `m.room.power_levels` в комнате (отдельной таблицы нет).
+
+#### Получить уровни
+
+- URL: `/api/v1/rooms/{roomId}/power_levels/`
+- Метод: `GET`
+- Требуется авторизация. Доступно любому участнику комнаты.
+
+Ответ:
+
+```json
+{
+  "power_levels": {
+    "users": { "@alice:example.com": 100, "@bob:example.com": 50 },
+    "users_default": 0,
+    "events_default": 0,
+    "invite": 0,
+    "kick": 50,
+    "ban": 50,
+    "redact": 50,
+    "state_default": 50,
+    "power_levels": 100
+  },
+  "my_level": 50
+}
+```
+
+#### Изменить уровни
+
+- URL: `/api/v1/rooms/{roomId}/power_levels/`
+- Метод: `POST`
+- Требуется уровень не ниже порога `power_levels` (по умолчанию 100 — только владелец).
+
+Назначить уровень участнику (тело):
+
+```json
+{ "user_id": "@bob:example.com", "level": 50 }
+```
+
+`level`, равный `users_default`, удаляет пользователя из карты `users`. Пользователь
+должен быть активным участником (`membership = join`).
+
+Изменить пороги (тело):
+
+```json
+{ "thresholds": { "events_default": 50, "ban": 75 } }
+```
+
+Допустимые ключи: `events_default`, `invite`, `kick`, `ban`, `redact`,
+`state_default`, `power_levels`, `users_default`.
+
+Правила: нельзя назначить уровень выше своего; нельзя менять участника с уровнем ≥
+своего (кроме себя); нельзя поднять порог выше своего уровня.
+
+Успешный ответ: `{ "status": "ok" }`.
+
+Ошибки: `{ "error": "Insufficient power level" }`,
+`{ "error": "Cannot assign a level above your own" }`,
+`{ "error": "Cannot modify a user with an equal or higher level" }`,
+`{ "error": "Cannot set a threshold above your own level" }`,
+`{ "error": "User is not an active member of this room" }`.
+
+#### Пороги по умолчанию
+
+| Действие | Порог |
+|---|---|
+| отправка сообщений (`events_default`) | 0 |
+| приглашение (`invite`) | 0 |
+| кик (`kick`) | 50 |
+| бан / разбан (`ban`) | 50 |
+| удаление чужих сообщений (`redact`) | 50 |
+| изменение настроек комнаты (`state_default`) | 50 |
+| изменение прав (`power_levels`) | 100 |
+| создатель комнаты | 100 (несносимо) |
+
+При `events_default > 0` комната работает в режиме анонсов: писать могут только
+участники с достаточным уровнем.
+
 ---
 
 ### Обновление комнаты
