@@ -52,6 +52,12 @@ const app = Vue.createApp({
             settingsAvatar: '',
             settingsJoinRule: 'public',
             settingsAvatarFile: null,
+            settingsEventsDefault: 0,
+            settingsInvite: 0,
+            settingsKick: 50,
+            settingsBan: 50,
+            settingsRedact: 50,
+            settingsStateDefault: 50,
             publicRooms: [],
             publicSearchQuery: '',
             publicSearchSearched: false,
@@ -1340,10 +1346,9 @@ const app = Vue.createApp({
          */
         async ban(userId) {
             const token = localStorage.getItem('token');
-            const currentUser = localStorage.getItem('user_id');
 
-            if (this.roomCreator !== currentUser) {
-                notify('Только владелец комнаты может банить пользователей', 'warning', 5000);
+            if (!this.can('ban')) {
+                notify('Недостаточно прав для этого действия', 'warning', 5000);
                 return;
             }
 
@@ -1401,10 +1406,9 @@ const app = Vue.createApp({
 
         async unban(userId) {
             const token = localStorage.getItem('token');
-            const currentUser = localStorage.getItem('user_id');
 
-            if (this.roomCreator !== currentUser) {
-                notify('Только владелец комнаты может снимать бан', 'warning', 5000);
+            if (!this.can('unban')) {
+                notify('Недостаточно прав для этого действия', 'warning', 5000);
                 return;
             }
 
@@ -1436,10 +1440,9 @@ const app = Vue.createApp({
          */
         async kick(userId) {
             const token = localStorage.getItem('token');
-            const currentUser = localStorage.getItem('user_id');
 
-            if (this.roomCreator !== currentUser) {
-                notify('Только владелец комнаты может выгонять пользователей', 'warning', 5000);
+            if (!this.can('kick')) {
+                notify('Недостаточно прав для этого действия', 'warning', 5000);
                 return;
             }
 
@@ -1461,6 +1464,50 @@ const app = Vue.createApp({
 
             notify('Пользователь выгнан из комнаты', 'success', 4000);
             this.openMembers(this.roomId);
+        },
+
+        /**
+         * Назначает участнику уровень доступа.
+         * @param {string} userId
+         * @param {number|string} level
+         * @returns {Promise<void>}
+         */
+        async setMemberLevel(userId, level) {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/v1/rooms/' + this.roomId + '/power_levels/', {
+                method: 'POST',
+                headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, level: Number(level) })
+            });
+            const result = await res.json();
+            if (result.error) { notify(result.error, 'warning', 5000); return; }
+            notify('Уровень доступа обновлён', 'success', 3000);
+            await this.fetchPowerLevels(this.roomId);
+            await this.openMembers(this.roomId);
+        },
+
+        /**
+         * Сохраняет пороги действий комнаты из модалки настроек.
+         * @returns {Promise<void>}
+         */
+        async saveThresholds() {
+            const token = localStorage.getItem('token');
+            const res = await fetch('/api/v1/rooms/' + this.roomId + '/power_levels/', {
+                method: 'POST',
+                headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ thresholds: {
+                    events_default: Number(this.settingsEventsDefault),
+                    invite: Number(this.settingsInvite),
+                    kick: Number(this.settingsKick),
+                    ban: Number(this.settingsBan),
+                    redact: Number(this.settingsRedact),
+                    state_default: Number(this.settingsStateDefault)
+                }})
+            });
+            const result = await res.json();
+            if (result.error) { notify(result.error, 'warning', 5000); return; }
+            notify('Права доступа сохранены', 'success', 3000);
+            await this.fetchPowerLevels(this.roomId);
         },
 
         /**
@@ -1708,6 +1755,14 @@ const app = Vue.createApp({
             this.settingsAvatar = this.roomAvatar;
             this.settingsJoinRule = this.roomJoinRule;
             this.settingsAvatarFile = null;
+
+            const lv = this.roomLevels(this.roomId);
+            this.settingsEventsDefault = lv.events_default;
+            this.settingsInvite = lv.invite;
+            this.settingsKick = lv.kick;
+            this.settingsBan = lv.ban;
+            this.settingsRedact = lv.redact;
+            this.settingsStateDefault = lv.state_default;
         },
 
         /**

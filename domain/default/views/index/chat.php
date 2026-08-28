@@ -190,8 +190,11 @@ $fInvite = new Form();
                 </div>
 
                 <!-- Форма -->
+                <div v-if="roomId && roomMembership === 'join' && !canPost()" class="msg-system announce-lock">
+                    В этой комнате могут писать только модераторы
+                </div>
                 <?=$fMessages->FormStart('sendMessage','POST', null, 'on', ['data' => true])?>
-                <div class="messageComposer" v-show="roomId && roomMembership === 'join'">
+                <div class="messageComposer" v-show="roomId && roomMembership === 'join' && canPost()">
                     <div v-if="replyTo" class="reply-indicator">
                         <span class="reply-indicator-text">Ответ {{ replyTo.sender }}: {{ replyTo.body }}</span>
                         <button type="button" class="btn-close btn-close-white btn-sm" @click="cancelReply" aria-label="Отменить"></button>
@@ -465,9 +468,33 @@ $fInvite = new Form();
                             <option value="invite">Закрытая (только по приглашению)</option>
                         </select>
                     </div>
+
+                    <hr v-if="can('power_levels')" />
+                    <div v-if="can('power_levels')" class="mb-3">
+                        <label class="fw-bold">Кто может писать</label>
+                        <select v-model.number="settingsEventsDefault" class="form-control">
+                            <option :value="0">Все участники</option>
+                            <option :value="50">Только модераторы</option>
+                            <option :value="100">Только владелец</option>
+                        </select>
+                        <small class="text-muted">Режим анонсов: при ограничении рядовые участники не смогут отправлять сообщения.</small>
+                    </div>
+                    <div v-if="can('power_levels')" class="mb-3">
+                        <details>
+                            <summary>Расширенные пороги</summary>
+                            <div class="row g-2 mt-1">
+                                <div class="col-6"><label class="small">Приглашать</label><input type="number" min="0" max="100" v-model.number="settingsInvite" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Выгонять</label><input type="number" min="0" max="100" v-model.number="settingsKick" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Банить</label><input type="number" min="0" max="100" v-model.number="settingsBan" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Удалять сообщения</label><input type="number" min="0" max="100" v-model.number="settingsRedact" class="form-control form-control-sm" /></div>
+                                <div class="col-6"><label class="small">Менять настройки</label><input type="number" min="0" max="100" v-model.number="settingsStateDefault" class="form-control form-control-sm" /></div>
+                            </div>
+                        </details>
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-outline-primary" v-if="can('power_levels')" @click="saveThresholds">Сохранить права</button>
                     <button type="button" class="btn btn-primary" @click="saveRoomSettings">Сохранить</button>
                 </div>
             </div>
@@ -493,13 +520,23 @@ $fInvite = new Form();
                             <span>
                                 <span v-if="isOnline(member.user_id)" class="online-dot-inline"></span>
                                 {{ member.user_id }}
+                                <span class="power-badge" :title="'Уровень доступа: ' + (member.power_level ?? 0)">{{ powerLabel(member.power_level) }}</span>
                                 <span v-if="member.membership === 'ban'" class="badge bg-danger ms-2">Забанен</span>
                             </span>
-                            <span v-if="isRoomOwner() && member.user_id !== roomCreator" class="d-flex gap-1">
-                                <button v-if="member.membership === 'ban'" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
-                                <template v-else>
-                                    <button class="btn btn-outline-warning btn-sm" @click="kick(member.user_id)" title="Выгнать (можно вернуться)">Выгнать</button>
-                                    <button class="btn btn-danger btn-sm" @click="ban(member.user_id)" title="Забанить (навсегда)">Забанить</button>
+                            <span class="d-flex gap-1 align-items-center power-controls">
+                                <select
+                                    v-if="can('power_levels') && member.membership === 'join' && member.user_id !== roomCreator && (member.power_level ?? 0) < myLevel(roomId)"
+                                    class="form-select form-select-sm"
+                                    :value="member.power_level ?? 0"
+                                    @change="setMemberLevel(member.user_id, $event.target.value)">
+                                    <option value="0">Участник</option>
+                                    <option value="50">Модератор</option>
+                                    <option :value="myLevel(roomId)">Максимум ({{ myLevel(roomId) }})</option>
+                                </select>
+                                <button v-if="member.membership === 'ban' && can('unban') && member.user_id !== roomCreator" class="btn btn-warning btn-sm" @click="unban(member.user_id)">Разбанить</button>
+                                <template v-else-if="member.membership !== 'ban' && member.user_id !== roomCreator && (member.power_level ?? 0) < myLevel(roomId)">
+                                    <button v-if="can('kick')" class="btn btn-outline-warning btn-sm" @click="kick(member.user_id)" title="Выгнать (можно вернуться)">Выгнать</button>
+                                    <button v-if="can('ban')" class="btn btn-danger btn-sm" @click="ban(member.user_id)" title="Забанить (навсегда)">Забанить</button>
                                 </template>
                             </span>
                         </div>
