@@ -473,9 +473,9 @@ $fInvite = new Form();
                     <div v-if="can('power_levels')" class="mb-3">
                         <label class="fw-bold">Кто может писать</label>
                         <select v-model.number="settingsEventsDefault" class="form-control">
-                            <option :value="0">Все участники</option>
-                            <option :value="50">Только модераторы</option>
-                            <option :value="100">Только владелец</option>
+                            <option value="0">Все участники</option>
+                            <option value="50">Только модераторы</option>
+                            <option value="100">Только владелец</option>
                         </select>
                         <small class="text-muted">Режим анонсов: при ограничении рядовые участники не смогут отправлять сообщения.</small>
                     </div>
@@ -494,7 +494,6 @@ $fInvite = new Form();
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="button" class="btn btn-outline-primary" v-if="can('power_levels')" @click="saveThresholds">Сохранить права</button>
                     <button type="button" class="btn btn-primary" @click="saveRoomSettings">Сохранить</button>
                 </div>
             </div>

@@ -1487,30 +1487,6 @@ const app = Vue.createApp({
         },
 
         /**
-         * Сохраняет пороги действий комнаты из модалки настроек.
-         * @returns {Promise<void>}
-         */
-        async saveThresholds() {
-            const token = localStorage.getItem('token');
-            const res = await fetch('/api/v1/rooms/' + this.roomId + '/power_levels/', {
-                method: 'POST',
-                headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ thresholds: {
-                    events_default: Number(this.settingsEventsDefault),
-                    invite: Number(this.settingsInvite),
-                    kick: Number(this.settingsKick),
-                    ban: Number(this.settingsBan),
-                    redact: Number(this.settingsRedact),
-                    state_default: Number(this.settingsStateDefault)
-                }})
-            });
-            const result = await res.json();
-            if (result.error) { notify(result.error, 'warning', 5000); return; }
-            notify('Права доступа сохранены', 'success', 3000);
-            await this.fetchPowerLevels(this.roomId);
-        },
-
-        /**
          * Ищет публичные комнаты по запросу.
          * @returns {Promise<void>}
          */
@@ -1836,6 +1812,28 @@ const app = Vue.createApp({
             if (result.error) {
                 notify(result.error, 'warning', 5000);
                 return;
+            }
+
+            // Пороги уровней доступа сохраняем тем же действием (если есть право).
+            if (this.can('power_levels')) {
+                const plRes = await fetch('/api/v1/rooms/' + this.roomId + '/power_levels/', {
+                    method: 'POST',
+                    headers: { "Authorization": "Bearer " + token, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thresholds: {
+                        events_default: Number(this.settingsEventsDefault),
+                        invite: Number(this.settingsInvite),
+                        kick: Number(this.settingsKick),
+                        ban: Number(this.settingsBan),
+                        redact: Number(this.settingsRedact),
+                        state_default: Number(this.settingsStateDefault)
+                    }})
+                });
+                const plResult = await plRes.json();
+                if (plResult.error) {
+                    notify(plResult.error, 'warning', 5000);
+                    return;
+                }
+                await this.fetchPowerLevels(this.roomId);
             }
 
             notify('Настройки сохранены', 'success', 3000);
