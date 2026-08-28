@@ -104,9 +104,9 @@ class Rooms extends DB{
             return json_encode(["error" => "Room not found"]);
         }
         
-        if($room['creator'] !== $sender){
+        if(!$this->canDo($roomId, $sender, 'state_default')){
             http_response_code(403);
-            return json_encode(["error" => "Only the room creator can change settings"]);
+            return json_encode(["error" => "Insufficient power level"]);
         }
         
         $update = [];

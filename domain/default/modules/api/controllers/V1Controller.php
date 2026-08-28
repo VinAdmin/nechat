@@ -6,6 +6,7 @@ use app\models\Events;
 use app\models\EventJson;
 use app\models\AccessToken;
 use app\models\RoomMemberships;
+use app\models\PowerLevels;
 use app\models\Filter;
 use app\models\UserPresence;
 use app\models\TypingIndicator;
@@ -423,6 +424,15 @@ class V1Controller extends \wco\kernel\Controller{
         $mRoomMemberships = new RoomMemberships();
         $mem = $mRoomMemberships->getRoomMembers($params['roomId']);
 
+        $mRooms = new Rooms();
+        $levels = $mRooms->getPowerLevels($params['roomId']);
+        $room = $mRooms->getRoomId($params['roomId']);
+        $creator = $room['creator'] ?? '';
+        foreach($mem as &$m){
+            $m['power_level'] = PowerLevels::levelForUser($levels, $m['user_id'] ?? '', $creator);
+        }
+        unset($m);
+
         return json_encode($mem);
     }
     
@@ -543,12 +553,19 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can ban users']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'ban')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $mFilter = new Filter();
         $userId = $mFilter->string($this->data['user_id']);
+
+        if($mRooms->userPowerLevel($params['roomId'], $userId) >= $mRooms->userPowerLevel($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Cannot modify a user with an equal or higher level']);
+        }
 
         $mRoomMemberships = new RoomMemberships();
         $updateResult = $mRoomMemberships->Update([
@@ -585,8 +602,11 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can unban users']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'unban')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $mFilter = new Filter();
@@ -685,12 +705,19 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can kick users']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'kick')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $mFilter = new Filter();
         $userId = $mFilter->string($this->data['user_id']);
+
+        if($mRooms->userPowerLevel($params['roomId'], $userId) >= $mRooms->userPowerLevel($params['roomId'], $params['sender'])){
+            return json_encode(['error' => 'Cannot modify a user with an equal or higher level']);
+        }
 
         $mRoomMemberships = new RoomMemberships();
         $mRoomMemberships->delete("room_id = :roomId AND user_id = :userId")
@@ -747,11 +774,10 @@ class V1Controller extends \wco\kernel\Controller{
         }
 
         $mRooms = new Rooms();
-        $room = $mRooms->getRoomId($params['roomId']);
-        $isOwner = isset($room['room_id']) && $room['creator'] === $params['sender'];
+        $canRedact = $mRooms->canDo($params['roomId'], $params['sender'], 'redact');
 
-        if($event['sender'] !== $params['sender'] && !$isOwner){
-            return json_encode(['error' => 'Only the author or room owner can delete the message']);
+        if($event['sender'] !== $params['sender'] && !$canRedact){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         $fileToDelete = null;
@@ -827,8 +853,11 @@ class V1Controller extends \wco\kernel\Controller{
 
         $mRooms = new Rooms();
         $room = $mRooms->getRoomId($params['roomId']);
-        if(!isset($room['room_id']) || $room['creator'] !== $params['sender']){
-            return json_encode(['error' => 'Only the room creator can change the avatar']);
+        if(!isset($room['room_id'])){
+            return json_encode(['error' => 'Room not found']);
+        }
+        if(!$mRooms->canDo($params['roomId'], $params['sender'], 'state_default')){
+            return json_encode(['error' => 'Insufficient power level']);
         }
 
         if(empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK){
